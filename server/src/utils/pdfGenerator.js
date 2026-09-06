@@ -1,5 +1,5 @@
 const PdfPrinter = require('pdfmake').default || require('pdfmake');
-const URLResolver = require('pdfmake/js/URLResolver').default || require('pdfmake/js/URLResolver');
+const URLResolver = require('pdfmake').default || require('pdfmake');
 
 // Standard fonts bundled with PDF readers
 const fonts = {
