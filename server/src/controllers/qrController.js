@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const db = require('../config/db');
+const prisma = require('../config/prismaClient');
 const { logAudit } = require('../services/auditService');
 const { getFisherClearanceStatus, getFisherFinancialSummary } = require('../services/financialService');
 
@@ -18,101 +18,134 @@ function generateRawToken() {
 }
 
 /**
+ * Helper to check if string is numeric ID
+ */
+function parseBigIntId(val) {
+  if (!val) return null;
+  const str = String(val).trim();
+  if (/^\d+$/.test(str)) {
+    try {
+      return BigInt(str);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
  * POST /api/qr/fishers/:fisherId/generate
  * Generate or reissue a secure opaque QR token for a Fisher
  */
 const generateQrToken = async (req, res, next) => {
-  let connection;
   try {
     const { fisherId } = req.params;
+    const numericId = parseBigIntId(fisherId);
 
-    connection = await db.getConnection();
-    await connection.beginTransaction();
+    const result = await prisma.$transaction(async (tx) => {
+      // Lock Fisher row FOR UPDATE using raw query for atomicity
+      let fishers;
+      if (numericId !== null) {
+        fishers = await tx.$queryRaw`
+          SELECT id, fisher_id, full_name, boat_no, status, is_archived 
+          FROM fishers 
+          WHERE id = ${numericId} OR fisher_id = ${String(fisherId)} 
+          FOR UPDATE
+        `;
+      } else {
+        fishers = await tx.$queryRaw`
+          SELECT id, fisher_id, full_name, boat_no, status, is_archived 
+          FROM fishers 
+          WHERE fisher_id = ${String(fisherId)} 
+          FOR UPDATE
+        `;
+      }
 
-    // Lock Fisher row FOR UPDATE
-    const [fishers] = await connection.query(
-      'SELECT id, fisher_id, full_name, boat_no, status, is_archived FROM fishers WHERE id = ? OR fisher_id = ? FOR UPDATE',
-      [fisherId, fisherId]
-    );
+      if (!fishers || fishers.length === 0) {
+        return { errorStatus: 404, errorMessage: 'Fisher record not found.' };
+      }
+      const fisher = fishers[0];
 
-    if (fishers.length === 0) {
-      await connection.rollback();
-      connection.release();
-      return res.status(404).json({ success: false, message: 'Fisher record not found.' });
-    }
-    const fisher = fishers[0];
+      if (fisher.is_archived) {
+        return { errorStatus: 400, errorMessage: 'Cannot generate QR for an archived fisher record.' };
+      }
 
-    if (fisher.is_archived) {
-      await connection.rollback();
-      connection.release();
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot generate QR for an archived fisher record.',
+      const fisherDbId = BigInt(fisher.id);
+
+      // Lock existing active tokens FOR UPDATE
+      const activeTokens = await tx.$queryRaw`
+        SELECT id FROM fisher_qr_tokens WHERE fisher_id = ${fisherDbId} AND is_active = TRUE FOR UPDATE
+      `;
+      const isReissue = activeTokens && activeTokens.length > 0;
+
+      const adminId = req.admin?.id || 1;
+
+      // Revoke any active token
+      if (isReissue) {
+        await tx.fisher_qr_tokens.updateMany({
+          where: {
+            fisher_id: fisherDbId,
+            is_active: true,
+          },
+          data: {
+            is_active: false,
+            revoked_at: new Date(),
+            revoked_by_admin_id: adminId,
+          },
+        });
+      }
+
+      // Generate new secure raw token & hash
+      const rawToken = generateRawToken();
+      const tokenHash = hashToken(rawToken);
+
+      const newRecord = await tx.fisher_qr_tokens.create({
+        data: {
+          fisher_id: fisherDbId,
+          token_hash: tokenHash,
+          is_active: true,
+          issued_at: new Date(),
+          created_by_admin_id: adminId,
+        },
       });
+
+      return {
+        isReissue,
+        rawToken,
+        newTokenRecordId: Number(newRecord.id),
+        fisher: {
+          id: Number(fisher.id),
+          fisher_id: fisher.fisher_id,
+          full_name: fisher.full_name,
+          boat_no: fisher.boat_no,
+        },
+      };
+    });
+
+    if (result.errorStatus) {
+      return res.status(result.errorStatus).json({ success: false, message: result.errorMessage });
     }
-
-    // Check existing active token count
-    const [activeTokens] = await connection.query(
-      'SELECT id FROM fisher_qr_tokens WHERE fisher_id = ? AND is_active = TRUE FOR UPDATE',
-      [fisher.id]
-    );
-    const isReissue = activeTokens.length > 0;
-
-    // Revoke any active token
-    if (isReissue) {
-      await connection.query(
-        `UPDATE fisher_qr_tokens 
-         SET is_active = FALSE, revoked_at = CURRENT_TIMESTAMP, revoked_by_admin_id = ?
-         WHERE fisher_id = ? AND is_active = TRUE`,
-        [req.admin?.id || 1, fisher.id]
-      );
-    }
-
-    // Generate new secure raw token & hash
-    const rawToken = generateRawToken();
-    const tokenHash = hashToken(rawToken);
-
-    const [insertRes] = await connection.query(
-      `INSERT INTO fisher_qr_tokens (fisher_id, token_hash, is_active, issued_at, created_by_admin_id)
-       VALUES (?, ?, TRUE, CURRENT_TIMESTAMP, ?)`,
-      [fisher.id, tokenHash, req.admin?.id || 1]
-    );
-
-    const newTokenRecordId = insertRes.insertId;
-
-    await connection.commit();
-    connection.release();
-    connection = null;
 
     // Log Audit (NEVER log rawToken!)
     await logAudit({
       adminId: req.admin?.id || null,
-      action: isReissue ? 'FISHER_QR_REISSUED' : 'FISHER_QR_ISSUED',
+      action: result.isReissue ? 'FISHER_QR_REISSUED' : 'FISHER_QR_ISSUED',
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
       metadata: {
-        fisherId: fisher.id,
-        customFisherId: fisher.fisher_id,
-        qrTokenRecordId: newTokenRecordId,
+        fisherId: result.fisher.id,
+        customFisherId: result.fisher.fisher_id,
+        qrTokenRecordId: result.newTokenRecordId,
       },
     });
 
     return res.status(200).json({
       success: true,
-      message: isReissue ? 'Fisher QR token reissued successfully.' : 'Fisher QR token generated successfully.',
-      rawToken, // Provided ONCE to client to render QR image
-      fisher: {
-        id: fisher.id,
-        fisher_id: fisher.fisher_id,
-        full_name: fisher.full_name,
-        boat_no: fisher.boat_no,
-      },
+      message: result.isReissue ? 'Fisher QR token reissued successfully.' : 'Fisher QR token generated successfully.',
+      rawToken: result.rawToken, // Provided ONCE to client to render QR image
+      fisher: result.fisher,
     });
   } catch (error) {
-    if (connection) {
-      await connection.rollback();
-      connection.release();
-    }
     next(error);
   }
 };
@@ -124,33 +157,58 @@ const generateQrToken = async (req, res, next) => {
 const getQrStatus = async (req, res, next) => {
   try {
     const { fisherId } = req.params;
+    const numericId = parseBigIntId(fisherId);
 
-    const [fishers] = await db.query(
-      'SELECT id, fisher_id, full_name, boat_no, status, is_archived FROM fishers WHERE id = ? OR fisher_id = ?',
-      [fisherId, fisherId]
-    );
+    const whereClause = {
+      OR: [
+        ...(numericId !== null ? [{ id: numericId }] : []),
+        { fisher_id: String(fisherId) },
+      ],
+    };
 
-    if (fishers.length === 0) {
+    const fisher = await prisma.fishers.findFirst({
+      where: whereClause,
+      select: {
+        id: true,
+        fisher_id: true,
+        full_name: true,
+        boat_no: true,
+        status: true,
+        is_archived: true,
+      },
+    });
+
+    if (!fisher) {
       return res.status(404).json({ success: false, message: 'Fisher record not found.' });
     }
-    const fisher = fishers[0];
 
-    const [activeTokens] = await db.query(
-      `SELECT id, issued_at, created_at
-       FROM fisher_qr_tokens
-       WHERE fisher_id = ? AND is_active = TRUE
-       ORDER BY id DESC LIMIT 1`,
-      [fisher.id]
-    );
+    const activeToken = await prisma.fisher_qr_tokens.findFirst({
+      where: {
+        fisher_id: fisher.id,
+        is_active: true,
+      },
+      orderBy: { id: 'desc' },
+      select: {
+        id: true,
+        issued_at: true,
+        created_at: true,
+      },
+    });
 
-    const isIssued = activeTokens.length > 0;
+    const isIssued = Boolean(activeToken);
 
     return res.status(200).json({
       success: true,
       isIssued,
-      activeToken: isIssued ? activeTokens[0] : null,
+      activeToken: isIssued
+        ? {
+            id: Number(activeToken.id),
+            issued_at: activeToken.issued_at,
+            created_at: activeToken.created_at,
+          }
+        : null,
       fisher: {
-        id: fisher.id,
+        id: Number(fisher.id),
         fisher_id: fisher.fisher_id,
         full_name: fisher.full_name,
         boat_no: fisher.boat_no,
@@ -169,32 +227,49 @@ const getQrStatus = async (req, res, next) => {
 const revokeQrToken = async (req, res, next) => {
   try {
     const { fisherId } = req.params;
+    const numericId = parseBigIntId(fisherId);
 
-    const [fishers] = await db.query('SELECT id, fisher_id FROM fishers WHERE id = ? OR fisher_id = ?', [
-      fisherId,
-      fisherId,
-    ]);
+    const whereClause = {
+      OR: [
+        ...(numericId !== null ? [{ id: numericId }] : []),
+        { fisher_id: String(fisherId) },
+      ],
+    };
 
-    if (fishers.length === 0) {
+    const fisher = await prisma.fishers.findFirst({
+      where: whereClause,
+      select: { id: true, fisher_id: true },
+    });
+
+    if (!fisher) {
       return res.status(404).json({ success: false, message: 'Fisher record not found.' });
     }
-    const fisher = fishers[0];
 
-    const [activeTokens] = await db.query(
-      'SELECT id FROM fisher_qr_tokens WHERE fisher_id = ? AND is_active = TRUE',
-      [fisher.id]
-    );
+    const activeToken = await prisma.fisher_qr_tokens.findFirst({
+      where: {
+        fisher_id: fisher.id,
+        is_active: true,
+      },
+      select: { id: true },
+    });
 
-    if (activeTokens.length === 0) {
+    if (!activeToken) {
       return res.status(400).json({ success: false, message: 'Fisher has no active QR token to revoke.' });
     }
 
-    await db.query(
-      `UPDATE fisher_qr_tokens
-       SET is_active = FALSE, revoked_at = CURRENT_TIMESTAMP, revoked_by_admin_id = ?
-       WHERE fisher_id = ? AND is_active = TRUE`,
-      [req.admin?.id || 1, fisher.id]
-    );
+    const adminId = req.admin?.id || 1;
+
+    await prisma.fisher_qr_tokens.updateMany({
+      where: {
+        fisher_id: fisher.id,
+        is_active: true,
+      },
+      data: {
+        is_active: false,
+        revoked_at: new Date(),
+        revoked_by_admin_id: adminId,
+      },
+    });
 
     await logAudit({
       adminId: req.admin?.id || null,
@@ -202,7 +277,7 @@ const revokeQrToken = async (req, res, next) => {
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
       metadata: {
-        fisherId: fisher.id,
+        fisherId: Number(fisher.id),
         customFisherId: fisher.fisher_id,
       },
     });
@@ -235,22 +310,17 @@ const verifyQrToken = async (req, res, next) => {
 
     const tokenHash = hashToken(trimmedToken);
 
-    // Query token record with Fisher details
-    const [rows] = await db.query(
-      `SELECT 
-         t.id as token_id, t.is_active, t.revoked_at, t.issued_at,
-         f.id as fisher_id, f.fisher_id as custom_fisher_id, f.full_name, f.nic, f.phone, f.boat_no, f.status as base_status, f.is_archived
-       FROM fisher_qr_tokens t
-       JOIN fishers f ON t.fisher_id = f.id
-       WHERE t.token_hash = ?`,
-      [tokenHash]
-    );
+    // Query token record with Fisher details via Prisma relation
+    const qrRecord = await prisma.fisher_qr_tokens.findUnique({
+      where: { token_hash: tokenHash },
+      include: {
+        fishers: true,
+      },
+    });
 
-    if (rows.length === 0) {
+    if (!qrRecord || !qrRecord.fishers) {
       return res.status(404).json({ success: false, message: 'Invalid Fisher QR.' });
     }
-
-    const qrRecord = rows[0];
 
     // Check if token is revoked or inactive
     if (!qrRecord.is_active || qrRecord.revoked_at) {
@@ -260,17 +330,21 @@ const verifyQrToken = async (req, res, next) => {
       });
     }
 
+    const fisher = qrRecord.fishers;
+
     // Check if Fisher is archived
-    if (qrRecord.is_archived) {
+    if (fisher.is_archived) {
       return res.status(400).json({
         success: false,
         message: 'Fisher record is archived.',
       });
     }
 
+    const fisherDbId = Number(fisher.id);
+
     // Retrieve real-time financial summary & effective clearance status
-    const summary = await getFisherFinancialSummary(qrRecord.fisher_id);
-    const clearance = await getFisherClearanceStatus(qrRecord.fisher_id);
+    const summary = await getFisherFinancialSummary(fisherDbId);
+    const clearance = await getFisherClearanceStatus(fisherDbId);
 
     // Audit log (Never log raw token!)
     await logAudit({
@@ -279,8 +353,8 @@ const verifyQrToken = async (req, res, next) => {
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
       metadata: {
-        fisherId: qrRecord.fisher_id,
-        customFisherId: qrRecord.custom_fisher_id,
+        fisherId: fisherDbId,
+        customFisherId: fisher.fisher_id,
         effectiveStatus: clearance.status,
       },
     });
@@ -288,13 +362,13 @@ const verifyQrToken = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       fisher: {
-        id: qrRecord.fisher_id,
-        fisher_id: qrRecord.custom_fisher_id,
-        full_name: qrRecord.full_name,
-        nic: qrRecord.nic,
-        phone: qrRecord.phone,
-        boat_no: qrRecord.boat_no,
-        base_status: qrRecord.base_status,
+        id: fisherDbId,
+        fisher_id: fisher.fisher_id,
+        full_name: fisher.full_name,
+        nic: fisher.nic,
+        phone: fisher.phone,
+        boat_no: fisher.boat_no,
+        base_status: fisher.status,
       },
       financialSummary: summary,
       clearanceStatus: clearance,
