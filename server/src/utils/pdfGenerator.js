@@ -209,16 +209,15 @@ const generatePdfReport = async ({
         },
       });
 
-      printer.createPdfKitDocument(docDefinition).then((pdfDoc) => {
-        const chunks = [];
-        pdfDoc.on('data', (chunk) => chunks.push(chunk));
-        pdfDoc.on('end', () => {
-          const result = Buffer.concat(chunks);
-          resolve(result);
-        });
-        pdfDoc.on('error', (err) => reject(err));
-        pdfDoc.end();
-      }).catch(reject);
+      const pdfDoc = printer.createPdfKitDocument(docDefinition);
+      const chunks = [];
+      pdfDoc.on('data', (chunk) => chunks.push(chunk));
+      pdfDoc.on('end', () => {
+        const result = Buffer.concat(chunks);
+        resolve(result);
+      });
+      pdfDoc.on('error', (err) => reject(err));
+      pdfDoc.end();
     } catch (err) {
       reject(err);
     }

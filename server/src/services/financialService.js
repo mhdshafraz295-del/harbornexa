@@ -1,36 +1,68 @@
 const Decimal = require('decimal.js');
-const db = require('../config/db');
+const prisma = require('../config/prismaClient');
 
 /**
- * Calculates authoritative financial summary for a Fisher using decimal.js
+ * Calculates authoritative financial summary for a Fisher using decimal.js & Prisma
  * 
  * @param {number|string} fisherId 
- * @param {Object} [queryDb] Optional database connection/pool (defaults to db)
+ * @param {Object} [dbClient] Optional Prisma Client or Transaction Client
  * @returns {Promise<{ totalDebt: string, totalPaid: string, outstandingDebt: string, openDebtCount: number, paidDebtCount: number }>}
  */
-const getFisherFinancialSummary = async (fisherId, queryDb = db) => {
-  // Query all non-cancelled debts
-  const [debts] = await queryDb.query(
-    `SELECT id, original_amount, status 
-     FROM fisher_debts 
-     WHERE fisher_id = ? AND status != 'CANCELLED'`,
-    [fisherId]
-  );
+const getFisherFinancialSummary = async (fisherId, dbClient = prisma) => {
+  const client = (dbClient && dbClient.fisher_debts) ? dbClient : prisma;
+  const isNumeric = !isNaN(Number(fisherId));
+  let realFisherId = null;
 
-  // Query all non-reversed payments
-  const [payments] = await queryDb.query(
-    `SELECT debt_id, amount 
-     FROM debt_payments 
-     WHERE fisher_id = ? AND reversed_at IS NULL`,
-    [fisherId]
-  );
+  if (isNumeric) {
+    realFisherId = BigInt(fisherId);
+  } else {
+    const f = await client.fishers.findFirst({
+      where: { fisher_id: String(fisherId) },
+      select: { id: true },
+    });
+    if (!f) {
+      return {
+        totalDebt: '0.00',
+        totalPaid: '0.00',
+        outstandingDebt: '0.00',
+        openDebtCount: 0,
+        paidDebtCount: 0,
+      };
+    }
+    realFisherId = f.id;
+  }
+
+  // Query all non-cancelled debts via Prisma / Transaction Client
+  const debts = await client.fisher_debts.findMany({
+    where: {
+      fisher_id: realFisherId,
+      status: { not: 'CANCELLED' },
+    },
+    select: {
+      id: true,
+      original_amount: true,
+      status: true,
+    },
+  });
+
+  // Query all non-reversed payments via Prisma / Transaction Client
+  const payments = await client.debt_payments.findMany({
+    where: {
+      fisher_id: realFisherId,
+      reversed_at: null,
+    },
+    select: {
+      debt_id: true,
+      amount: true,
+    },
+  });
 
   let totalDebt = new Decimal(0);
   let openDebtCount = 0;
   let paidDebtCount = 0;
 
   for (const d of debts) {
-    totalDebt = totalDebt.plus(new Decimal(d.original_amount || 0));
+    totalDebt = totalDebt.plus(new Decimal(d.original_amount ? d.original_amount.toString() : 0));
     if (d.status === 'PAID') {
       paidDebtCount += 1;
     } else {
@@ -40,7 +72,7 @@ const getFisherFinancialSummary = async (fisherId, queryDb = db) => {
 
   let totalPaid = new Decimal(0);
   for (const p of payments) {
-    totalPaid = totalPaid.plus(new Decimal(p.amount || 0));
+    totalPaid = totalPaid.plus(new Decimal(p.amount ? p.amount.toString() : 0));
   }
 
   let outstandingDebt = totalDebt.minus(totalPaid);
@@ -69,17 +101,30 @@ const getFisherFinancialSummary = async (fisherId, queryDb = db) => {
  * 6. Base status ACTIVE & 0 holds -> CLEARED
  * 
  * @param {number|string} fisherId 
- * @param {Object} [queryDb] Optional database connection/pool (defaults to db)
+ * @param {Object} [dbClient] Optional Prisma Client or Transaction Client
  * @returns {Promise<{ status: string, canProceed: boolean, debtHold: boolean, manualHold: boolean, outstandingDebt: string, reasons: Array }>}
  */
-const getFisherClearanceStatus = async (fisherId, queryDb = db) => {
-  // 1. Query Fisher base status & archived flag
-  const [fisherRows] = await queryDb.query(
-    'SELECT id, fisher_id, full_name, status, is_archived FROM fishers WHERE id = ? OR fisher_id = ?',
-    [fisherId, fisherId]
-  );
+const getFisherClearanceStatus = async (fisherId, dbClient = prisma) => {
+  const client = (dbClient && dbClient.fishers) ? dbClient : prisma;
+  const isNumeric = !isNaN(Number(fisherId));
 
-  if (fisherRows.length === 0) {
+  const whereCondition = isNumeric
+    ? { OR: [{ id: BigInt(fisherId) }, { fisher_id: String(fisherId) }] }
+    : { fisher_id: String(fisherId) };
+
+  // 1. Query Fisher base status & archived flag via Prisma / Transaction Client
+  const fisher = await client.fishers.findFirst({
+    where: whereCondition,
+    select: {
+      id: true,
+      fisher_id: true,
+      full_name: true,
+      status: true,
+      is_archived: true,
+    },
+  });
+
+  if (!fisher) {
     return {
       status: 'NOT_ELIGIBLE',
       canProceed: false,
@@ -90,7 +135,6 @@ const getFisherClearanceStatus = async (fisherId, queryDb = db) => {
     };
   }
 
-  const fisher = fisherRows[0];
   const realFisherId = fisher.id;
 
   if (fisher.is_archived) {
@@ -104,17 +148,24 @@ const getFisherClearanceStatus = async (fisherId, queryDb = db) => {
     };
   }
 
-  // 2. Query active manual holds
-  const [activeHolds] = await queryDb.query(
-    `SELECT id, reason_code, reason_text, notes, hold_date
-     FROM fisher_holds
-     WHERE fisher_id = ? AND released_at IS NULL
-     ORDER BY id ASC`,
-    [realFisherId]
-  );
+  // 2. Query active manual holds via Prisma / Transaction Client
+  const activeHolds = await client.fisher_holds.findMany({
+    where: {
+      fisher_id: realFisherId,
+      released_at: null,
+    },
+    orderBy: { id: 'asc' },
+    select: {
+      id: true,
+      reason_code: true,
+      reason_text: true,
+      notes: true,
+      hold_date: true,
+    },
+  });
 
-  // 3. Query financial summary
-  const summary = await getFisherFinancialSummary(realFisherId, queryDb);
+  // 3. Query financial summary using SAME transaction/Prisma client
+  const summary = await getFisherFinancialSummary(realFisherId, client);
   const hasDebtHold = new Decimal(summary.outstandingDebt).gt(0);
   const hasManualHold = activeHolds.length > 0 || fisher.status === 'BLOCKED';
 
@@ -148,7 +199,7 @@ const getFisherClearanceStatus = async (fisherId, queryDb = db) => {
     reasons.push({
       code: h.reason_code,
       label,
-      holdId: h.id,
+      holdId: Number(h.id),
       notes: h.notes,
       holdDate: h.hold_date,
     });

@@ -1,5 +1,5 @@
 const { verifyToken } = require('../utils/jwt');
-const db = require('../config/db');
+const prisma = require('../config/prismaClient');
 
 const requireAuth = async (req, res, next) => {
   try {
@@ -24,20 +24,25 @@ const requireAuth = async (req, res, next) => {
       });
     }
 
-    // Query active admin user
-    const [rows] = await db.query(
-      'SELECT id, name, email, role, status, last_login_at FROM admins WHERE id = ?',
-      [adminId]
-    );
+    // Query active admin user using Prisma
+    const admin = await prisma.admins.findUnique({
+      where: { id: Number(adminId) },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        status: true,
+        last_login_at: true,
+      },
+    });
 
-    if (rows.length === 0) {
+    if (!admin) {
       return res.status(401).json({
         success: false,
         message: 'Admin account not found.',
       });
     }
-
-    const admin = rows[0];
 
     // Check account status
     if (admin.status !== 'ACTIVE') {

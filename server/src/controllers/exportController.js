@@ -1,6 +1,7 @@
 const xlsx = require('xlsx');
 const multer = require('multer');
-const db = require('../config/db');
+const Decimal = require('decimal.js');
+const prisma = require('../config/prismaClient');
 const { validateSriLankanNIC, normalizeSriLankanPhone } = require('../utils/validation');
 const { getFisherClearanceStatus } = require('../services/financialService');
 const { logAudit } = require('../services/auditService');
@@ -216,8 +217,12 @@ const previewFisherImport = async (req, res, next) => {
 
     let existingDbNicSet = new Set();
     if (extractedNics.length > 0) {
-      const placeholders = extractedNics.map(() => '?').join(',');
-      const [existingRows] = await db.query(`SELECT nic FROM fishers WHERE nic IN (${placeholders})`, extractedNics);
+      const existingRows = await prisma.fishers.findMany({
+        where: {
+          nic: { in: extractedNics },
+        },
+        select: { nic: true },
+      });
       existingDbNicSet = new Set(existingRows.map((r) => r.nic.toUpperCase()));
     }
 
@@ -323,69 +328,68 @@ const previewFisherImport = async (req, res, next) => {
 
 /**
  * POST /api/export/confirm-import
- * Batch insert valid fishers with transaction-safe Fisher ID sequence increment
+ * Batch insert valid fishers with transaction-safe Fisher ID sequence increment using Prisma
  */
 const confirmFisherImport = async (req, res, next) => {
-  let connection;
   try {
     const { validRows } = req.body;
     if (!Array.isArray(validRows) || validRows.length === 0) {
       return res.status(400).json({ success: false, message: 'No valid rows submitted for import.' });
     }
 
-    connection = await db.getConnection();
-    await connection.beginTransaction();
+    const insertedFishers = await prisma.$transaction(async (tx) => {
+      // Lock sequence row FOR UPDATE using raw query for atomicity
+      const seqRows = await tx.$queryRaw`
+        SELECT next_value FROM system_sequences WHERE sequence_name = 'FISHER' FOR UPDATE
+      `;
 
-    // Lock sequence row for transaction safety
-    const [seqRows] = await connection.query(
-      "SELECT next_value FROM system_sequences WHERE sequence_name = 'FISHER' FOR UPDATE"
-    );
+      let startVal = 1;
+      if (!seqRows || seqRows.length === 0) {
+        await tx.system_sequences.create({
+          data: { sequence_name: 'FISHER', next_value: 1 },
+        });
+        startVal = 1;
+      } else {
+        startVal = Number(seqRows[0].next_value);
+      }
 
-    let startVal = 1;
-    if (seqRows.length === 0) {
-      await connection.query("INSERT INTO system_sequences (sequence_name, next_value) VALUES ('FISHER', 1)");
-      startVal = 1;
-    } else {
-      startVal = seqRows[0].next_value;
-    }
+      const inserted = [];
+      let currentSeq = startVal;
 
-    const insertedFishers = [];
-    let currentSeq = startVal;
+      for (const row of validRows) {
+        const fisherIdNum = currentSeq++;
+        const formattedFisherId = `FIS-${String(fisherIdNum).padStart(6, '0')}`;
 
-    for (const row of validRows) {
-      const fisherIdNum = currentSeq++;
-      const formattedFisherId = `FIS-${String(fisherIdNum).padStart(6, '0')}`;
+        const newFisher = await tx.fishers.create({
+          data: {
+            fisher_id: formattedFisherId,
+            full_name: row.full_name,
+            nic: row.nic,
+            phone: row.phone || null,
+            boat_no: row.boat_no || null,
+            address: row.address || null,
+            notes: row.notes || null,
+            status: row.status || 'ACTIVE',
+            created_by_admin_id: req.admin?.id || null,
+          },
+        });
 
-      const [insertResult] = await connection.query(
-        `INSERT INTO fishers (fisher_id, full_name, nic, phone, boat_no, address, notes, status, created_by_admin_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          formattedFisherId,
-          row.full_name,
-          row.nic,
-          row.phone || null,
-          row.boat_no || null,
-          row.address || null,
-          row.notes || null,
-          row.status || 'ACTIVE',
-          req.admin?.id || null,
-        ]
-      );
+        inserted.push({
+          id: Number(newFisher.id),
+          fisher_id: formattedFisherId,
+          full_name: row.full_name,
+          nic: row.nic,
+        });
+      }
 
-      insertedFishers.push({
-        id: insertResult.insertId,
-        fisher_id: formattedFisherId,
-        full_name: row.full_name,
-        nic: row.nic,
+      // Update system sequence to new next value
+      await tx.system_sequences.update({
+        where: { sequence_name: 'FISHER' },
+        data: { next_value: BigInt(currentSeq) },
       });
-    }
 
-    // Update system sequence to new next value
-    await connection.query("UPDATE system_sequences SET next_value = ? WHERE sequence_name = 'FISHER'", [currentSeq]);
-
-    await connection.commit();
-    connection.release();
-    connection = null;
+      return inserted;
+    });
 
     // Log Audit
     await logAudit({
@@ -407,9 +411,11 @@ const confirmFisherImport = async (req, res, next) => {
       importedFishers: insertedFishers,
     });
   } catch (error) {
-    if (connection) {
-      await connection.rollback();
-      connection.release();
+    if (error.code === 'P2002') {
+      return res.status(400).json({
+        success: false,
+        message: 'NIC already exists in database',
+      });
     }
     next(error);
   }
@@ -455,41 +461,40 @@ const exportFishers = async (req, res, next) => {
   try {
     const { format = 'excel', search = '', status = '', archiveStatus = 'ACTIVE' } = req.query;
 
-    const whereConditions = [];
-    const queryParams = [];
+    const where = {};
 
     if (archiveStatus === 'ARCHIVED') {
-      whereConditions.push('f.is_archived = TRUE');
+      where.is_archived = true;
     } else if (archiveStatus !== 'ALL') {
-      whereConditions.push('f.is_archived = FALSE');
+      where.is_archived = false;
     }
 
     const trimmedSearch = search.trim();
     if (trimmedSearch) {
-      whereConditions.push('(f.fisher_id LIKE ? OR f.full_name LIKE ? OR f.nic LIKE ? OR f.phone LIKE ? OR f.boat_no LIKE ?)');
-      const pattern = `%${trimmedSearch}%`;
-      queryParams.push(pattern, pattern, pattern, pattern, pattern);
+      where.OR = [
+        { fisher_id: { contains: trimmedSearch } },
+        { full_name: { contains: trimmedSearch } },
+        { nic: { contains: trimmedSearch } },
+        { phone: { contains: trimmedSearch } },
+        { boat_no: { contains: trimmedSearch } },
+      ];
     }
 
-    const whereSql = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
-
-    const listSql = `
-      SELECT f.id, f.fisher_id, f.full_name, f.nic, f.phone, f.boat_no, f.address, f.notes, f.status, f.is_archived, f.created_at
-      FROM fishers f
-      ${whereSql}
-      ORDER BY f.id DESC
-    `;
-
-    const [rawRows] = await db.query(listSql, queryParams);
+    const rawRows = await prisma.fishers.findMany({
+      where,
+      orderBy: { id: 'desc' },
+    });
 
     // Enrich rows with effective clearance status
     const enrichedRows = await Promise.all(
       rawRows.map(async (row) => {
-        const clearance = await getFisherClearanceStatus(row.id);
+        const fisherIdNum = Number(row.id);
+        const clearance = await getFisherClearanceStatus(fisherIdNum);
         const effectiveStatus = clearance.status === 'CLEARED' ? 'CLEARED' : clearance.status === 'HOLD' ? 'HOLD' : clearance.status;
 
         return {
           ...row,
+          id: fisherIdNum,
           effectiveStatus,
           outstandingDebt: clearance.outstandingDebt,
         };
@@ -571,45 +576,41 @@ const exportDebts = async (req, res, next) => {
   try {
     const { format = 'excel', search = '', status = '' } = req.query;
 
-    const whereConditions = [];
-    const queryParams = [];
+    const where = {};
 
     const trimmedSearch = search.trim();
     if (trimmedSearch) {
-      whereConditions.push('(f.fisher_id LIKE ? OR f.full_name LIKE ? OR f.nic LIKE ? OR fd.description LIKE ?)');
-      const pattern = `%${trimmedSearch}%`;
-      queryParams.push(pattern, pattern, pattern, pattern);
+      where.OR = [
+        { fishers: { fisher_id: { contains: trimmedSearch } } },
+        { fishers: { full_name: { contains: trimmedSearch } } },
+        { fishers: { nic: { contains: trimmedSearch } } },
+        { description: { contains: trimmedSearch } },
+      ];
     }
 
     if (status) {
-      whereConditions.push('fd.status = ?');
-      queryParams.push(status.toUpperCase());
+      where.status = status.toUpperCase();
     }
 
-    const whereSql = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
-
-    const listSql = `
-      SELECT 
-        fd.id, fd.original_amount, fd.status, fd.created_at, fd.due_date, fd.description, fd.category,
-        f.fisher_id, f.full_name, f.nic, f.boat_no,
-        COALESCE(SUM(dp.amount), 0) AS total_paid
-      FROM fisher_debts fd
-      JOIN fishers f ON fd.fisher_id = f.id
-      LEFT JOIN debt_payments dp ON fd.id = dp.debt_id AND dp.reversed_at IS NULL
-      ${whereSql}
-      GROUP BY fd.id
-      ORDER BY fd.id DESC
-    `;
-
-    const [rows] = await db.query(listSql, queryParams);
+    const rows = await prisma.fisher_debts.findMany({
+      where,
+      orderBy: { id: 'desc' },
+      include: {
+        fishers: true,
+        debt_payments: {
+          where: { reversed_at: null },
+          select: { amount: true },
+        },
+      },
+    });
 
     let sumOriginal = 0;
     let sumPaid = 0;
     let sumRemaining = 0;
 
     const exportData = rows.map((r) => {
-      const orig = parseFloat(r.original_amount) || 0;
-      const paid = parseFloat(r.total_paid) || 0;
+      const orig = parseFloat(r.original_amount ? r.original_amount.toString() : 0) || 0;
+      const paid = r.debt_payments.reduce((acc, p) => acc + (parseFloat(p.amount ? p.amount.toString() : 0) || 0), 0);
       const rem = Math.max(0, orig - paid);
 
       sumOriginal += orig;
@@ -618,10 +619,10 @@ const exportDebts = async (req, res, next) => {
 
       return {
         'Debt Code': `DEBT-${r.id}`,
-        'Fisher ID': r.fisher_id,
-        'Fisher Name': r.full_name,
-        NIC: r.nic,
-        'Boat Number': r.boat_no || '-',
+        'Fisher ID': r.fishers.fisher_id,
+        'Fisher Name': r.fishers.full_name,
+        NIC: r.fishers.nic,
+        'Boat Number': r.fishers.boat_no || '-',
         'Charge Type': r.category || r.description || 'General Charge',
         'Original Amount': fmtCurrency(orig),
         'Paid Amount': fmtCurrency(paid),
@@ -681,47 +682,41 @@ const exportPayments = async (req, res, next) => {
   try {
     const { format = 'excel', search = '', startDate = '', endDate = '' } = req.query;
 
-    const whereConditions = [];
-    const queryParams = [];
+    const where = {};
 
     const trimmedSearch = search.trim();
     if (trimmedSearch) {
-      whereConditions.push('(dp.reference_no LIKE ? OR f.fisher_id LIKE ? OR f.full_name LIKE ? OR f.nic LIKE ?)');
-      const pattern = `%${trimmedSearch}%`;
-      queryParams.push(pattern, pattern, pattern, pattern);
+      where.OR = [
+        { reference_no: { contains: trimmedSearch } },
+        { fishers: { fisher_id: { contains: trimmedSearch } } },
+        { fishers: { full_name: { contains: trimmedSearch } } },
+        { fishers: { nic: { contains: trimmedSearch } } },
+      ];
     }
 
-    if (startDate) {
-      whereConditions.push('dp.created_at >= ?');
-      queryParams.push(`${startDate} 00:00:00`);
+    if (startDate || endDate) {
+      where.created_at = {};
+      if (startDate) {
+        where.created_at.gte = new Date(`${startDate}T00:00:00.000Z`);
+      }
+      if (endDate) {
+        where.created_at.lte = new Date(`${endDate}T23:59:59.999Z`);
+      }
     }
 
-    if (endDate) {
-      whereConditions.push('dp.created_at <= ?');
-      queryParams.push(`${endDate} 23:59:59`);
-    }
-
-    const whereSql = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
-
-    const listSql = `
-      SELECT 
-        dp.id, dp.amount, dp.payment_method, dp.reference_no, dp.created_at, dp.reversed_at, dp.reversal_reason, dp.debt_id,
-        f.fisher_id, f.full_name, f.nic, f.boat_no,
-        fd.category AS debt_category, fd.description AS debt_description,
-        a.name AS collected_by_admin
-      FROM debt_payments dp
-      JOIN fishers f ON dp.fisher_id = f.id
-      JOIN fisher_debts fd ON dp.debt_id = fd.id
-      LEFT JOIN admins a ON dp.received_by_admin_id = a.id
-      ${whereSql}
-      ORDER BY dp.id DESC
-    `;
-
-    const [rows] = await db.query(listSql, queryParams);
+    const rows = await prisma.debt_payments.findMany({
+      where,
+      orderBy: { id: 'desc' },
+      include: {
+        fishers: true,
+        fisher_debts: true,
+        admins_debt_payments_received_by_admin_idToadmins: true,
+      },
+    });
 
     let sumPayments = 0;
     const exportData = rows.map((r) => {
-      const amt = parseFloat(r.amount) || 0;
+      const amt = parseFloat(r.amount ? r.amount.toString() : 0) || 0;
       if (!r.reversed_at) {
         sumPayments += amt;
       }
@@ -729,15 +724,15 @@ const exportPayments = async (req, res, next) => {
       return {
         'Receipt No': r.reference_no || `REC-${String(r.id).padStart(6, '0')}`,
         'Payment Date': fmtDate(r.created_at),
-        'Fisher ID': r.fisher_id,
-        'Fisher Name': r.full_name,
-        NIC: r.nic,
+        'Fisher ID': r.fishers.fisher_id,
+        'Fisher Name': r.fishers.full_name,
+        NIC: r.fishers.nic,
         'Debt Code': `DEBT-${r.debt_id}`,
-        'Charge Type': r.debt_category || r.debt_description || 'General Charge',
+        'Charge Type': r.fisher_debts.category || r.fisher_debts.description || 'General Charge',
         'Amount Paid': fmtCurrency(amt),
         'Payment Method': r.payment_method || 'CASH',
         'Status': r.reversed_at ? 'REVERSED' : 'ACTIVE',
-        'Collected By': r.collected_by_admin || 'System Admin',
+        'Collected By': r.admins_debt_payments_received_by_admin_idToadmins?.name || 'System Admin',
         'Reversal Reason': r.reversal_reason || '-',
       };
     });
@@ -792,51 +787,47 @@ const exportClearances = async (req, res, next) => {
   try {
     const { format = 'excel', search = '', status = '', startDate = '', endDate = '' } = req.query;
 
-    const whereConditions = [];
-    const queryParams = [];
+    const where = {};
 
     const trimmedSearch = search.trim();
     if (trimmedSearch) {
-      whereConditions.push('(cr.clearance_no LIKE ? OR f.fisher_id LIKE ? OR f.full_name LIKE ? OR f.nic LIKE ? OR f.boat_no LIKE ?)');
-      const pattern = `%${trimmedSearch}%`;
-      queryParams.push(pattern, pattern, pattern, pattern, pattern);
+      where.OR = [
+        { clearance_no: { contains: trimmedSearch } },
+        { fishers: { fisher_id: { contains: trimmedSearch } } },
+        { fishers: { full_name: { contains: trimmedSearch } } },
+        { fishers: { nic: { contains: trimmedSearch } } },
+        { fishers: { boat_no: { contains: trimmedSearch } } },
+      ];
     }
 
-    if (startDate) {
-      whereConditions.push('cr.granted_at >= ?');
-      queryParams.push(`${startDate} 00:00:00`);
+    if (startDate || endDate) {
+      where.granted_at = {};
+      if (startDate) {
+        where.granted_at.gte = new Date(`${startDate}T00:00:00.000Z`);
+      }
+      if (endDate) {
+        where.granted_at.lte = new Date(`${endDate}T23:59:59.999Z`);
+      }
     }
 
-    if (endDate) {
-      whereConditions.push('cr.granted_at <= ?');
-      queryParams.push(`${endDate} 23:59:59`);
-    }
-
-    const whereSql = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
-
-    const listSql = `
-      SELECT 
-        cr.id, cr.clearance_no, cr.granted_at, cr.clearance_status, cr.notes, cr.created_at,
-        f.fisher_id, f.full_name, f.nic, f.boat_no,
-        a.name AS issued_by_admin
-      FROM clearance_records cr
-      JOIN fishers f ON cr.fisher_id = f.id
-      LEFT JOIN admins a ON cr.granted_by_admin_id = a.id
-      ${whereSql}
-      ORDER BY cr.id DESC
-    `;
-
-    const [rows] = await db.query(listSql, queryParams);
+    const rows = await prisma.clearance_records.findMany({
+      where,
+      orderBy: { id: 'desc' },
+      include: {
+        fishers: true,
+        admins: true,
+      },
+    });
 
     const exportData = rows.map((r) => ({
       'Clearance No': r.clearance_no || `CLR-${String(r.id).padStart(6, '0')}`,
       'Issued Date/Time': fmtDate(r.granted_at || r.created_at),
-      'Fisher ID': r.fisher_id,
-      'Fisher Name': r.full_name,
-      NIC: r.nic,
-      'Boat Number': r.boat_no || '-',
+      'Fisher ID': r.fishers.fisher_id,
+      'Fisher Name': r.fishers.full_name,
+      NIC: r.fishers.nic,
+      'Boat Number': r.fishers.boat_no || '-',
       Status: r.clearance_status || 'CLEARED',
-      'Issued By': r.issued_by_admin || 'System Admin',
+      'Issued By': r.admins?.name || 'System Admin',
       Notes: r.notes || '-',
     }));
 
@@ -890,53 +881,47 @@ const exportBlockHistory = async (req, res, next) => {
   try {
     const { format = 'excel', search = '', status = '' } = req.query;
 
-    const whereConditions = [];
-    const queryParams = [];
+    const where = {};
 
     const trimmedSearch = search.trim();
     if (trimmedSearch) {
-      whereConditions.push('(fh.reason_code LIKE ? OR fh.reason_text LIKE ? OR f.fisher_id LIKE ? OR f.full_name LIKE ? OR f.nic LIKE ?)');
-      const pattern = `%${trimmedSearch}%`;
-      queryParams.push(pattern, pattern, pattern, pattern, pattern);
+      where.OR = [
+        { reason_text: { contains: trimmedSearch } },
+        { fishers: { fisher_id: { contains: trimmedSearch } } },
+        { fishers: { full_name: { contains: trimmedSearch } } },
+        { fishers: { nic: { contains: trimmedSearch } } },
+      ];
     }
 
     if (status === 'ACTIVE') {
-      whereConditions.push('fh.released_at IS NULL');
+      where.released_at = null;
     } else if (status === 'RELEASED') {
-      whereConditions.push('fh.released_at IS NOT NULL');
+      where.released_at = { not: null };
     }
 
-    const whereSql = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
-
-    const listSql = `
-      SELECT 
-        fh.id, fh.reason_code, fh.reason_text, fh.notes, fh.hold_date, fh.released_at, fh.release_notes,
-        f.fisher_id, f.full_name, f.nic, f.boat_no,
-        a1.name AS held_by_admin,
-        a2.name AS released_by_admin
-      FROM fisher_holds fh
-      JOIN fishers f ON fh.fisher_id = f.id
-      LEFT JOIN admins a1 ON fh.created_by_admin_id = a1.id
-      LEFT JOIN admins a2 ON fh.released_by_admin_id = a2.id
-      ${whereSql}
-      ORDER BY fh.id DESC
-    `;
-
-    const [rows] = await db.query(listSql, queryParams);
+    const rows = await prisma.fisher_holds.findMany({
+      where,
+      orderBy: { id: 'desc' },
+      include: {
+        fishers: true,
+        admins_fisher_holds_created_by_admin_idToadmins: true,
+        admins_fisher_holds_released_by_admin_idToadmins: true,
+      },
+    });
 
     const exportData = rows.map((r) => ({
       'Hold ID': `HOLD-${r.id}`,
       'Hold Date': fmtDate(r.hold_date),
-      'Fisher ID': r.fisher_id,
-      'Fisher Name': r.full_name,
-      NIC: r.nic,
-      'Boat Number': r.boat_no || '-',
+      'Fisher ID': r.fishers.fisher_id,
+      'Fisher Name': r.fishers.full_name,
+      NIC: r.fishers.nic,
+      'Boat Number': r.fishers.boat_no || '-',
       'Reason Code': r.reason_code || 'MANUAL_HOLD',
       'Reason Details': r.reason_text || r.notes || 'Manual hold applied',
       'Hold Status': r.released_at ? 'RELEASED' : 'ACTIVE',
-      'Held By Admin': r.held_by_admin || 'System Admin',
+      'Held By Admin': r.admins_fisher_holds_created_by_admin_idToadmins?.name || 'System Admin',
       'Released Date': fmtDate(r.released_at),
-      'Released By Admin': r.released_by_admin || '-',
+      'Released By Admin': r.admins_fisher_holds_released_by_admin_idToadmins?.name || '-',
       'Release Notes': r.release_notes || '-',
     }));
 
@@ -987,36 +972,33 @@ const exportActiveFishers = async (req, res, next) => {
   try {
     const { format = 'pdf', search = '' } = req.query;
 
-    const whereConditions = ['f.is_archived = FALSE'];
-    const queryParams = [];
+    const where = { is_archived: false };
 
     const trimmedSearch = search.trim();
     if (trimmedSearch) {
-      whereConditions.push(
-        '(f.fisher_id LIKE ? OR f.full_name LIKE ? OR f.nic LIKE ? OR f.phone LIKE ? OR f.boat_no LIKE ?)'
-      );
-      const pattern = `%${trimmedSearch}%`;
-      queryParams.push(pattern, pattern, pattern, pattern, pattern);
+      where.OR = [
+        { fisher_id: { contains: trimmedSearch } },
+        { full_name: { contains: trimmedSearch } },
+        { nic: { contains: trimmedSearch } },
+        { phone: { contains: trimmedSearch } },
+        { boat_no: { contains: trimmedSearch } },
+      ];
     }
 
-    const whereSql = `WHERE ${whereConditions.join(' AND ')}`;
-
-    const listSql = `
-      SELECT f.id, f.fisher_id, f.full_name, f.nic, f.phone, f.boat_no
-      FROM fishers f
-      ${whereSql}
-      ORDER BY f.id ASC
-    `;
-
-    const [rawRows] = await db.query(listSql, queryParams);
+    const rawRows = await prisma.fishers.findMany({
+      where,
+      orderBy: { id: 'asc' },
+    });
 
     // Filter to only fishers whose central effective clearance status === 'CLEARED'
     const clearedFishers = [];
     for (const fisher of rawRows) {
-      const clearance = await getFisherClearanceStatus(fisher.id);
+      const fisherIdNum = Number(fisher.id);
+      const clearance = await getFisherClearanceStatus(fisherIdNum);
       if (clearance.status === 'CLEARED') {
         clearedFishers.push({
           ...fisher,
+          id: fisherIdNum,
           outstandingDebt: clearance.outstandingDebt,
         });
       }
@@ -1081,33 +1063,29 @@ const exportBlockedFishers = async (req, res, next) => {
   try {
     const { format = 'pdf', search = '' } = req.query;
 
-    const whereConditions = ['f.is_archived = FALSE'];
-    const queryParams = [];
+    const where = { is_archived: false };
 
     const trimmedSearch = search.trim();
     if (trimmedSearch) {
-      whereConditions.push(
-        '(f.fisher_id LIKE ? OR f.full_name LIKE ? OR f.nic LIKE ? OR f.phone LIKE ? OR f.boat_no LIKE ?)'
-      );
-      const pattern = `%${trimmedSearch}%`;
-      queryParams.push(pattern, pattern, pattern, pattern, pattern);
+      where.OR = [
+        { fisher_id: { contains: trimmedSearch } },
+        { full_name: { contains: trimmedSearch } },
+        { nic: { contains: trimmedSearch } },
+        { phone: { contains: trimmedSearch } },
+        { boat_no: { contains: trimmedSearch } },
+      ];
     }
 
-    const whereSql = `WHERE ${whereConditions.join(' AND ')}`;
-
-    const listSql = `
-      SELECT f.id, f.fisher_id, f.full_name, f.nic, f.phone, f.boat_no
-      FROM fishers f
-      ${whereSql}
-      ORDER BY f.id ASC
-    `;
-
-    const [rawRows] = await db.query(listSql, queryParams);
+    const rawRows = await prisma.fishers.findMany({
+      where,
+      orderBy: { id: 'asc' },
+    });
 
     // Filter to only fishers whose central effective clearance status === 'HOLD'
     const blockedFishers = [];
     for (const fisher of rawRows) {
-      const clearance = await getFisherClearanceStatus(fisher.id);
+      const fisherIdNum = Number(fisher.id);
+      const clearance = await getFisherClearanceStatus(fisherIdNum);
       if (clearance.status === 'HOLD') {
         const reasonLabels = (clearance.reasons || [])
           .map((r) => r.label)
@@ -1116,6 +1094,7 @@ const exportBlockedFishers = async (req, res, next) => {
 
         blockedFishers.push({
           ...fisher,
+          id: fisherIdNum,
           outstandingDebt: clearance.outstandingDebt,
           blockReasons: reasonLabels || 'Hold Pending Investigation',
         });

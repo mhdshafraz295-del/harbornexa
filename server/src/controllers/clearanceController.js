@@ -1,5 +1,6 @@
 const Decimal = require('decimal.js');
-const db = require('../config/db');
+const prisma = require('../config/prismaClient');
+const { Prisma } = require('@prisma/client');
 const { getFisherClearanceStatus, getFisherFinancialSummary } = require('../services/financialService');
 const { logAudit } = require('../services/auditService');
 
@@ -11,41 +12,80 @@ function getColomboTodayDateString() {
 }
 
 /**
+ * Helper to map clearance_records BigInt fields to Numbers and Decimal snapshots to Strings
+ */
+function mapClearanceRecord(c) {
+  if (!c) return null;
+  return {
+    id: Number(c.id),
+    clearance_no: c.clearance_no,
+    fisher_id: Number(c.fisher_id),
+    boat_no_snapshot: c.boat_no_snapshot,
+    base_status_snapshot: c.base_status_snapshot,
+    outstanding_debt_snapshot: c.outstanding_debt_snapshot
+      ? new Decimal(c.outstanding_debt_snapshot.toString()).toFixed(2)
+      : '0.00',
+    clearance_status: c.clearance_status,
+    notes: c.notes,
+    idempotency_key: c.idempotency_key,
+    granted_by_admin_id: Number(c.granted_by_admin_id),
+    granted_at: c.granted_at,
+    created_at: c.created_at,
+    granted_by_admin_name: c.admins?.name || c.granted_by_admin_name || null,
+    custom_fisher_id: c.fishers?.fisher_id || c.custom_fisher_id || null,
+    full_name: c.fishers?.full_name || c.full_name || null,
+  };
+}
+
+/**
  * GET /api/clearance/fishers/:fisherId
  * Get Fisher clearance panel details including derived status, hold reasons, financial summary, and last clearance
  */
 const getFisherClearance = async (req, res, next) => {
   try {
     const { fisherId } = req.params;
+    const isNumeric = !isNaN(Number(fisherId));
+    const fisherWhere = isNumeric
+      ? { OR: [{ id: BigInt(fisherId) }, { fisher_id: String(fisherId) }] }
+      : { fisher_id: String(fisherId) };
 
-    const [fishers] = await db.query(
-      'SELECT id, fisher_id, full_name, nic, phone, boat_no, status, is_archived FROM fishers WHERE id = ? OR fisher_id = ?',
-      [fisherId, fisherId]
-    );
+    const fisher = await prisma.fishers.findFirst({
+      where: fisherWhere,
+      select: {
+        id: true,
+        fisher_id: true,
+        full_name: true,
+        nic: true,
+        phone: true,
+        boat_no: true,
+        status: true,
+        is_archived: true,
+      },
+    });
 
-    if (fishers.length === 0) {
+    if (!fisher) {
       return res.status(404).json({ success: false, message: 'Fisher record not found.' });
     }
-    const fisher = fishers[0];
 
     const clearanceStatus = await getFisherClearanceStatus(fisher.id);
     const financialSummary = await getFisherFinancialSummary(fisher.id);
 
-    // Get last clearance record
-    const [lastClearances] = await db.query(
-      `SELECT c.*, a.name as granted_by_admin_name
-       FROM clearance_records c
-       LEFT JOIN admins a ON c.granted_by_admin_id = a.id
-       WHERE c.fisher_id = ?
-       ORDER BY c.granted_at DESC
-       LIMIT 1`,
-      [fisher.id]
-    );
-    const lastClearance = lastClearances.length > 0 ? lastClearances[0] : null;
+    const lastClearanceRaw = await prisma.clearance_records.findFirst({
+      where: { fisher_id: fisher.id },
+      include: {
+        admins: { select: { name: true } },
+      },
+      orderBy: { granted_at: 'desc' },
+    });
+
+    const lastClearance = lastClearanceRaw ? mapClearanceRecord(lastClearanceRaw) : null;
 
     return res.status(200).json({
       success: true,
-      fisher,
+      fisher: {
+        ...fisher,
+        id: Number(fisher.id),
+      },
       clearanceStatus,
       financialSummary,
       lastClearance,
@@ -60,7 +100,6 @@ const getFisherClearance = async (req, res, next) => {
  * Atomic Grant Clearance transaction with FOR UPDATE row-level locking & idempotency
  */
 const grantClearance = async (req, res, next) => {
-  let connection;
   try {
     const { fisherId } = req.params;
     const { idempotencyKey, notes } = req.body;
@@ -70,30 +109,31 @@ const grantClearance = async (req, res, next) => {
     }
     const key = idempotencyKey.trim();
 
+    const isNumeric = !isNaN(Number(fisherId));
+    const fisherWhere = isNumeric
+      ? { OR: [{ id: BigInt(fisherId) }, { fisher_id: String(fisherId) }] }
+      : { fisher_id: String(fisherId) };
+
+    const targetFisher = await prisma.fishers.findFirst({
+      where: fisherWhere,
+      select: { id: true },
+    });
+
     // 1. Pre-flight Idempotency Check
-    const [existingKeyRows] = await db.query(
-      `SELECT c.*, a.name as granted_by_admin_name, f.fisher_id as custom_fisher_id, f.full_name
-       FROM clearance_records c
-       JOIN fishers f ON c.fisher_id = f.id
-       LEFT JOIN admins a ON c.granted_by_admin_id = a.id
-       WHERE c.idempotency_key = ?`,
-      [key]
-    );
+    const existingRecord = await prisma.clearance_records.findUnique({
+      where: { idempotency_key: key },
+      include: {
+        admins: { select: { name: true } },
+        fishers: { select: { fisher_id: true, full_name: true } },
+      },
+    });
 
-    if (existingKeyRows.length > 0) {
-      const existing = existingKeyRows[0];
-      // Check if target fisher matches
-      const [targetFisher] = await db.query(
-        'SELECT id FROM fishers WHERE id = ? OR fisher_id = ?',
-        [fisherId, fisherId]
-      );
-      const targetId = targetFisher.length > 0 ? targetFisher[0].id : null;
-
-      if (targetId && String(existing.fisher_id) === String(targetId)) {
+    if (existingRecord) {
+      if (targetFisher && existingRecord.fisher_id === targetFisher.id) {
         return res.status(200).json({
           success: true,
           message: 'Clearance already granted.',
-          clearance: existing,
+          clearance: mapClearanceRecord(existingRecord),
         });
       }
 
@@ -103,126 +143,108 @@ const grantClearance = async (req, res, next) => {
       });
     }
 
-    // 2. Transaction Safety: Acquire Connection & Begin Transaction
-    connection = await db.getConnection();
-    await connection.beginTransaction();
-
-    // Lock Fisher row FOR UPDATE
-    const [fishers] = await connection.query(
-      'SELECT id, fisher_id, full_name, boat_no, status, is_archived FROM fishers WHERE id = ? OR fisher_id = ? FOR UPDATE',
-      [fisherId, fisherId]
-    );
-
-    if (fishers.length === 0) {
-      await connection.rollback();
-      connection.release();
+    if (!targetFisher) {
       return res.status(404).json({ success: false, message: 'Fisher record not found.' });
     }
-    const fisher = fishers[0];
 
-    if (fisher.is_archived) {
-      await connection.rollback();
-      connection.release();
-      return res.status(400).json({ success: false, message: 'Archived fishers cannot be granted clearance.' });
-    }
+    // 2. Transaction Safety: Atomic Transaction with FOR UPDATE Row Locking
+    const result = await prisma.$transaction(async (tx) => {
+      // Lock Fisher row FOR UPDATE
+      const fishers = await tx.$queryRaw`SELECT id, fisher_id, full_name, boat_no, status, is_archived FROM fishers WHERE id = ${targetFisher.id} FOR UPDATE`;
+      if (!fishers || fishers.length === 0) {
+        const err = new Error('Fisher record not found.');
+        err.statusCode = 404;
+        throw err;
+      }
+      const fisher = fishers[0];
 
-    // Recalculate effective clearance status using SAME transaction connection
-    const currentStatus = await getFisherClearanceStatus(fisher.id, connection);
+      if (fisher.is_archived) {
+        const err = new Error('Archived fishers cannot be granted clearance.');
+        err.statusCode = 400;
+        throw err;
+      }
 
-    if (currentStatus.status !== 'CLEARED') {
-      await connection.rollback();
-      connection.release();
-      return res.status(400).json({
-        success: false,
-        message: 'Fisher cannot be granted clearance due to active hold or pending status.',
-        clearanceStatus: currentStatus,
+      // Recalculate effective clearance status INSIDE SAME TRANSACTION
+      const currentStatus = await getFisherClearanceStatus(fisher.id, tx);
+
+      if (currentStatus.status !== 'CLEARED') {
+        const err = new Error('Fisher cannot be granted clearance due to active hold or pending status.');
+        err.statusCode = 400;
+        err.clearanceStatus = currentStatus;
+        throw err;
+      }
+
+      // Lock CLEARANCE sequence row FOR UPDATE
+      const seqRows = await tx.$queryRaw`SELECT next_value FROM system_sequences WHERE sequence_name = 'CLEARANCE' FOR UPDATE`;
+      let nextValue = 1;
+
+      if (seqRows && seqRows.length > 0) {
+        nextValue = Number(seqRows[0].next_value);
+        await tx.$queryRaw`UPDATE system_sequences SET next_value = next_value + 1 WHERE sequence_name = 'CLEARANCE'`;
+      } else {
+        await tx.$queryRaw`INSERT INTO system_sequences (sequence_name, next_value) VALUES ('CLEARANCE', 2)`;
+      }
+
+      const clearanceNo = `CLR-${String(nextValue).padStart(6, '0')}`;
+      const adminId = req.admin?.id || 1;
+
+      const createdRecord = await tx.clearance_records.create({
+        data: {
+          clearance_no: clearanceNo,
+          fisher_id: fisher.id,
+          boat_no_snapshot: fisher.boat_no || null,
+          base_status_snapshot: fisher.status,
+          outstanding_debt_snapshot: new Prisma.Decimal(currentStatus.outstandingDebt),
+          clearance_status: 'CLEARED',
+          notes: notes ? notes.trim() : null,
+          idempotency_key: key,
+          granted_by_admin_id: adminId,
+        },
+        include: {
+          admins: { select: { name: true } },
+          fishers: { select: { fisher_id: true, full_name: true } },
+        },
       });
-    }
 
-    // Lock CLEARANCE sequence row FOR UPDATE
-    const [seqRows] = await connection.query(
-      "SELECT next_value FROM system_sequences WHERE sequence_name = 'CLEARANCE' FOR UPDATE"
-    );
+      return { createdRecord, clearanceNo, fisher, adminId };
+    });
 
-    let nextValue = 1;
-    if (seqRows.length > 0) {
-      nextValue = parseInt(seqRows[0].next_value, 10);
-    } else {
-      await connection.query("INSERT INTO system_sequences (sequence_name, next_value) VALUES ('CLEARANCE', 1)");
-    }
-
-    const clearanceNo = `CLR-${String(nextValue).padStart(6, '0')}`;
-
-    // Increment sequence
-    await connection.query(
-      "UPDATE system_sequences SET next_value = next_value + 1 WHERE sequence_name = 'CLEARANCE'"
-    );
-
-    // Insert into clearance_records
-    const adminId = req.admin?.id || 1;
-    const [insertRes] = await connection.query(
-      `INSERT INTO clearance_records 
-       (clearance_no, fisher_id, boat_no_snapshot, base_status_snapshot, outstanding_debt_snapshot, clearance_status, notes, idempotency_key, granted_by_admin_id)
-       VALUES (?, ?, ?, ?, ?, 'CLEARED', ?, ?, ?)`,
-      [
-        clearanceNo,
-        fisher.id,
-        fisher.boat_no || null,
-        fisher.status,
-        currentStatus.outstandingDebt,
-        notes ? notes.trim() : null,
-        key,
-        adminId,
-      ]
-    );
-
-    const newClearanceId = insertRes.insertId;
-
-    await connection.commit();
-    connection.release();
-    connection = null;
-
-    // Log Audit
+    // 3. Log Audit
     await logAudit({
-      adminId,
+      adminId: result.adminId,
       action: 'CLEARANCE_GRANTED',
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
       metadata: {
-        clearanceId: newClearanceId,
-        clearanceNo,
-        fisherId: fisher.id,
-        customFisherId: fisher.fisher_id,
-        boatNoSnapshot: fisher.boat_no,
+        clearanceId: Number(result.createdRecord.id),
+        clearanceNo: result.clearanceNo,
+        fisherId: Number(result.fisher.id),
+        customFisherId: result.fisher.fisher_id,
+        boatNoSnapshot: result.fisher.boat_no,
       },
     });
-
-    const [createdRows] = await db.query(
-      `SELECT c.*, a.name as granted_by_admin_name, f.fisher_id as custom_fisher_id, f.full_name
-       FROM clearance_records c
-       JOIN fishers f ON c.fisher_id = f.id
-       LEFT JOIN admins a ON c.granted_by_admin_id = a.id
-       WHERE c.id = ?`,
-      [newClearanceId]
-    );
 
     return res.status(201).json({
       success: true,
       message: 'Clearance granted successfully.',
-      clearance: createdRows[0],
+      clearance: mapClearanceRecord(result.createdRecord),
     });
   } catch (error) {
-    if (connection) {
-      await connection.rollback();
-      connection.release();
+    if (error.statusCode) {
+      const response = { success: false, message: error.message };
+      if (error.clearanceStatus) {
+        response.clearanceStatus = error.clearanceStatus;
+      }
+      return res.status(error.statusCode).json(response);
     }
-    // Handle concurrent ER_DUP_ENTRY for idempotency_key safely
-    if (error.code === 'ER_DUP_ENTRY') {
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       return res.status(409).json({
         success: false,
         message: 'Idempotency key has already been used for another clearance.',
       });
     }
+
     next(error);
   }
 };
@@ -233,23 +255,18 @@ const grantClearance = async (req, res, next) => {
  */
 const getTodayClearances = async (req, res, next) => {
   try {
-    const colomboTodayDate = getColomboTodayDateString(); // e.g. "2026-09-06"
+    const colomboTodayDate = getColomboTodayDateString();
 
-    // Query clearances granted during current Asia/Colombo business day
-    const [rows] = await db.query(
-      `SELECT c.*, f.fisher_id as custom_fisher_id, f.full_name, f.phone, a.name as granted_by_admin_name
-       FROM clearance_records c
-       JOIN fishers f ON c.fisher_id = f.id
-       LEFT JOIN admins a ON c.granted_by_admin_id = a.id
-       WHERE DATE(c.granted_at) = ? OR DATE(CONVERT_TZ(c.granted_at, '+00:00', '+05:30')) = ?
-       ORDER BY c.granted_at DESC`,
-      [colomboTodayDate, colomboTodayDate]
-    );
+    const rawClearances = await prisma.$queryRaw`
+      SELECT c.*, f.fisher_id as custom_fisher_id, f.full_name, f.phone, a.name as granted_by_admin_name
+      FROM clearance_records c
+      JOIN fishers f ON c.fisher_id = f.id
+      LEFT JOIN admins a ON c.granted_by_admin_id = a.id
+      WHERE DATE(c.granted_at) = ${colomboTodayDate} OR DATE(CONVERT_TZ(c.granted_at, '+00:00', '+05:30')) = ${colomboTodayDate}
+      ORDER BY c.granted_at DESC
+    `;
 
-    const clearances = rows.map((c) => ({
-      ...c,
-      outstanding_debt_snapshot: new Decimal(c.outstanding_debt_snapshot || 0).toFixed(2),
-    }));
+    const clearances = rawClearances.map((c) => mapClearanceRecord(c));
 
     return res.status(200).json({
       success: true,
@@ -269,26 +286,29 @@ const getTodayClearances = async (req, res, next) => {
 const getFisherClearanceHistory = async (req, res, next) => {
   try {
     const { fisherId } = req.params;
+    const isNumeric = !isNaN(Number(fisherId));
+    const fisherWhere = isNumeric
+      ? { OR: [{ id: BigInt(fisherId) }, { fisher_id: String(fisherId) }] }
+      : { fisher_id: String(fisherId) };
 
-    const [fishers] = await db.query('SELECT id FROM fishers WHERE id = ? OR fisher_id = ?', [fisherId, fisherId]);
-    if (fishers.length === 0) {
+    const fisher = await prisma.fishers.findFirst({
+      where: fisherWhere,
+      select: { id: true },
+    });
+
+    if (!fisher) {
       return res.status(404).json({ success: false, message: 'Fisher record not found.' });
     }
-    const realFisherId = fishers[0].id;
 
-    const [rows] = await db.query(
-      `SELECT c.*, a.name as granted_by_admin_name
-       FROM clearance_records c
-       LEFT JOIN admins a ON c.granted_by_admin_id = a.id
-       WHERE c.fisher_id = ?
-       ORDER BY c.granted_at DESC`,
-      [realFisherId]
-    );
+    const rawRecords = await prisma.clearance_records.findMany({
+      where: { fisher_id: fisher.id },
+      include: {
+        admins: { select: { name: true } },
+      },
+      orderBy: { granted_at: 'desc' },
+    });
 
-    const history = rows.map((c) => ({
-      ...c,
-      outstanding_debt_snapshot: new Decimal(c.outstanding_debt_snapshot || 0).toFixed(2),
-    }));
+    const history = rawRecords.map((c) => mapClearanceRecord(c));
 
     return res.status(200).json({
       success: true,
