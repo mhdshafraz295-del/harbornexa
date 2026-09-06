@@ -1,5 +1,5 @@
 const bcrypt = require('bcrypt');
-const db = require('../config/db');
+const prisma = require('../config/prismaClient');
 const env = require('../config/env');
 const { generateToken } = require('../utils/jwt');
 const { logAudit } = require('../services/auditService');
@@ -27,10 +27,12 @@ const login = async (req, res, next) => {
       });
     }
 
-    // Query admin user by email
-    const [rows] = await db.query('SELECT * FROM admins WHERE email = ?', [email]);
+    // Query admin user by email using Prisma
+    const admin = await prisma.admins.findUnique({
+      where: { email },
+    });
 
-    if (rows.length === 0) {
+    if (!admin) {
       await logAudit({
         action: 'LOGIN_FAILED',
         ipAddress,
@@ -42,8 +44,6 @@ const login = async (req, res, next) => {
         message: 'Invalid email or password.',
       });
     }
-
-    const admin = rows[0];
 
     // Check account status
     if (admin.status !== 'ACTIVE') {
@@ -76,15 +76,18 @@ const login = async (req, res, next) => {
       });
     }
 
-    // Minimal Payload: adminId and role ONLY (no passwords, hashes, secrets, or sensitive details)
+    // Minimal Payload: adminId and role ONLY
     const token = generateToken({
       adminId: admin.id,
       role: admin.role,
     });
 
-    // Update last_login_at timestamp
+    // Update last_login_at timestamp using Prisma
     const now = new Date();
-    await db.query('UPDATE admins SET last_login_at = ? WHERE id = ?', [now, admin.id]);
+    await prisma.admins.update({
+      where: { id: admin.id },
+      data: { last_login_at: now },
+    });
 
     // Log success in audit_logs
     await logAudit({
