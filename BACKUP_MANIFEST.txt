@@ -1,0 +1,9 @@
+﻿Project: Valachchenai Harbor Fisher Clearance Management System
+Version: v1.0.0
+Backup Date: 2026-09-06
+Status: FINAL LOCK READY
+Database: valachchenai_harbor
+Source Backup: Created
+Database SQL Backup: Created
+Git Commit: 797b416f2f8bb9f9d21549417571f99b2dcd5f7d
+Git Tag: v1.0.0

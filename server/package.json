@@ -1,0 +1,29 @@
+{
+  "name": "valachchenai-harbor-server",
+  "version": "1.0.0",
+  "description": "Valachchenai Harbor Fisher Clearance Management System - Server API",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "migrate": "node src/scripts/migrate.js",
+    "create-admin": "node src/scripts/createAdmin.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.750.0",
+    "bcrypt": "^5.1.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "decimal.js": "^10.6.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.3.0",
+    "mysql2": "^3.12.0",
+    "pdfmake": "^0.3.11",
+    "xlsx": "^0.18.5"
+  }
+}
