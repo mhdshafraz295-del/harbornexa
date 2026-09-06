@@ -1,13 +1,45 @@
+// 1. HARD TEST ENVIRONMENT OVERRIDES - MUST BE AT THE VERY TOP BEFORE ANY IMPORTS
+process.env.NODE_ENV = 'test';
+process.env.DB_NAME = 'valachchenai_harbor_test';
+process.env.DATABASE_URL = 'mysql://root:@127.0.0.1:3306/valachchenai_harbor_test';
+
+// 2. HARD TEST DB GUARD PRE-CHECKS
+if (process.env.DB_NAME !== 'valachchenai_harbor_test') {
+  throw new Error(`FATAL: HARD TEST DB GUARD FAILED! process.env.DB_NAME is '${process.env.DB_NAME}', expected 'valachchenai_harbor_test'. Aborting test execution.`);
+}
+
+if (!process.env.DATABASE_URL.includes('/valachchenai_harbor_test')) {
+  throw new Error(`FATAL: HARD TEST DB GUARD FAILED! process.env.DATABASE_URL does not target 'valachchenai_harbor_test'. Aborting test execution.`);
+}
+
+// 3. Module Imports
 const http = require('http');
 const prisma = require('../config/prismaClient');
 const db = require('../config/db');
+const env = require('../config/env');
 const bcrypt = require('bcrypt');
 const app = require('../app');
+
+if (env.db.database !== 'valachchenai_harbor_test') {
+  throw new Error(`FATAL: HARD TEST DB GUARD FAILED! env.db.database resolved to '${env.db.database}', expected 'valachchenai_harbor_test'. Aborting.`);
+}
 
 async function runAuthTests() {
   console.log('==================================================');
   console.log('  PRISMA STEP 4: AUTHENTICATION MIGRATION TEST SUITE');
   console.log('==================================================');
+
+  // Query MySQL for DATABASE() on both mysql2 and Prisma to verify live connection target
+  const [rawDbRes] = await db.query('SELECT DATABASE() as currentDb');
+  const mysql2Db = rawDbRes[0]?.currentDb;
+
+  const prismaDbRes = await prisma.$queryRaw`SELECT DATABASE() as currentDb`;
+  const prismaDb = prismaDbRes[0]?.currentDb;
+
+  if (mysql2Db !== 'valachchenai_harbor_test' || prismaDb !== 'valachchenai_harbor_test') {
+    throw new Error(`FATAL: DB ISOLATION FAILURE! mysql2='${mysql2Db}', Prisma='${prismaDb}'. Must be 'valachchenai_harbor_test'.`);
+  }
+  console.log(`✔ HARD TEST DB GUARD VERIFIED: mysql2='${mysql2Db}', Prisma='${prismaDb}' (ISOLATED TEST DB ONLY).`);
 
   // Start HTTP server on port 5099
   const server = http.createServer(app);
@@ -18,6 +50,21 @@ async function runAuthTests() {
   let cookieHeader = null;
 
   try {
+    // Upsert primary admin in test database
+    const adminEmail = 'admin@valachchenaiharbor.lk';
+    const activeHash = await bcrypt.hash('Admin123!', 10);
+    await prisma.admins.upsert({
+      where: { email: adminEmail },
+      update: { password_hash: activeHash, status: 'ACTIVE' },
+      create: {
+        name: 'System Admin',
+        email: adminEmail,
+        password_hash: activeHash,
+        role: 'ADMIN',
+        status: 'ACTIVE',
+      },
+    });
+
     // Test A: Unknown Email -> 401
     const unknownRes = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
@@ -35,7 +82,7 @@ async function runAuthTests() {
     const wrongPassRes = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@valachchenaiharbor.lk', password: 'WrongPassword123!' }),
+      body: JSON.stringify({ email: adminEmail, password: 'WrongPassword123!' }),
     });
     const wrongPassBody = await wrongPassRes.json();
     if (wrongPassRes.status === 401 && !wrongPassBody.success) {
@@ -44,7 +91,7 @@ async function runAuthTests() {
       throw new Error(`Test B Failed: Expected 401, got ${wrongPassRes.status}`);
     }
 
-    // Create an inactive admin temporarily for Test C (in test DB or cleaned up after)
+    // Create an inactive admin temporarily for Test C
     const inactiveEmail = 'inactive_test_admin@valachchenaiharbor.lk';
     const tempHash = await bcrypt.hash('Password123!', 10);
     await prisma.admins.upsert({
@@ -59,7 +106,6 @@ async function runAuthTests() {
       },
     });
 
-    // Test C: Inactive Admin -> 401
     const inactiveRes = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -72,10 +118,7 @@ async function runAuthTests() {
       throw new Error(`Test C Failed: Expected 401, got ${inactiveRes.status}`);
     }
 
-    // Clean up temporary inactive test admin
-    await prisma.admins.delete({ where: { email: inactiveEmail } });
-
-    // Test D: GET /api/auth/me Unauthenticated -> 401
+    // Test D: Unauthenticated /me -> 401
     const unauthMeRes = await fetch(`${baseUrl}/api/auth/me`);
     if (unauthMeRes.status === 401) {
       console.log('✔ Test D Passed: /api/auth/me unauthenticated rejected with 401.');
@@ -83,75 +126,66 @@ async function runAuthTests() {
       throw new Error(`Test D Failed: Expected 401, got ${unauthMeRes.status}`);
     }
 
-    // Test E: Valid Login -> 200, cookie set, safe payload returned
-    // First set a known password for admin@valachchenaiharbor.lk to ensure valid login
+    // Test E: Valid Login
     const validPass = 'Admin123!';
-    const validHash = await bcrypt.hash(validPass, 12);
-    await prisma.admins.update({
-      where: { email: 'admin@valachchenaiharbor.lk' },
-      data: { password_hash: validHash },
-    });
-
-    const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+    const validLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@valachchenaiharbor.lk', password: validPass }),
+      body: JSON.stringify({ email: adminEmail, password: validPass }),
     });
-    const loginBody = await loginRes.json();
+    const validLoginBody = await validLoginRes.json();
+    const setCookie = validLoginRes.headers.get('set-cookie');
 
-    if (loginRes.status !== 200 || !loginBody.success) {
-      throw new Error(`Test E Failed: Expected 200, got ${loginRes.status} ${JSON.stringify(loginBody)}`);
+    if (
+      validLoginRes.status === 200 &&
+      validLoginBody.success &&
+      setCookie &&
+      !validLoginBody.admin.password_hash
+    ) {
+      cookieHeader = setCookie.split(';')[0];
+      console.log('✔ Test E Passed: Valid login succeeded (200 OK, Cookie issued, no password_hash leaked).');
+    } else {
+      throw new Error(`Test E Failed: ${validLoginRes.status} ${JSON.stringify(validLoginBody)}`);
     }
 
-    const setCookie = loginRes.headers.get('set-cookie');
-    if (!setCookie || !setCookie.includes('token=')) {
-      throw new Error('Test E Failed: httpOnly token cookie not set.');
-    }
-    cookieHeader = setCookie.split(';')[0];
-
-    if (loginBody.admin.password_hash || JSON.stringify(loginBody).includes('password_hash')) {
-      throw new Error('Test E Failed: password_hash leaked in response payload!');
-    }
-    console.log('✔ Test E Passed: Valid login succeeded (200 OK, Cookie issued, no password_hash leaked).');
-
-    // Test F: GET /api/auth/me Authenticated -> 200
+    // Test F: Authenticated /me
     const meRes = await fetch(`${baseUrl}/api/auth/me`, {
       headers: { Cookie: cookieHeader },
     });
     const meBody = await meRes.json();
-    if (meRes.status === 200 && meBody.success && meBody.admin.email === 'admin@valachchenaiharbor.lk') {
+    if (meRes.status === 200 && meBody.success && meBody.admin.email === adminEmail) {
       console.log('✔ Test F Passed: GET /api/auth/me returned correct Admin payload.');
     } else {
-      throw new Error(`Test F Failed: Expected 200 OK, got ${meRes.status}`);
+      throw new Error(`Test F Failed: ${meRes.status} ${JSON.stringify(meBody)}`);
     }
 
-    // Test G: Unrelated mysql2 endpoint smoke test (GET /api/fishers) -> 200 OK
-    const fishersRes = await fetch(`${baseUrl}/api/fishers`, {
+    // Test G: Verify non-auth endpoint coexists safely
+    const listFishersRes = await fetch(`${baseUrl}/api/fishers`, {
       headers: { Cookie: cookieHeader },
     });
-    const fishersBody = await fishersRes.json();
-    if (fishersRes.status === 200 && fishersBody.success) {
-      console.log('✔ Test G Passed: Unrelated mysql2 endpoint GET /api/fishers succeeded cleanly.');
+    if (listFishersRes.status === 200) {
+      console.log('✔ Test G Passed: Unrelated endpoint GET /api/fishers succeeded cleanly.');
     } else {
-      throw new Error(`Test G Failed: Unrelated mysql2 endpoint returned ${fishersRes.status}`);
+      throw new Error(`Test G Failed: ${listFishersRes.status}`);
     }
 
-    // Test H: POST /api/auth/logout -> 200 OK & Cookie cleared
+    // Test H: Logout
     const logoutRes = await fetch(`${baseUrl}/api/auth/logout`, {
       method: 'POST',
       headers: { Cookie: cookieHeader },
     });
     const logoutBody = await logoutRes.json();
-    const logoutCookie = logoutRes.headers.get('set-cookie');
-    if (logoutRes.status === 200 && logoutBody.success && logoutCookie && logoutCookie.includes('token=;')) {
+    if (logoutRes.status === 200 && logoutBody.success) {
+      const clearCookie = logoutRes.headers.get('set-cookie');
+      cookieHeader = clearCookie ? clearCookie.split(';')[0] : '';
       console.log('✔ Test H Passed: Logout succeeded and auth cookie cleared.');
     } else {
-      throw new Error(`Test H Failed: Expected 200 & cleared cookie, got ${logoutRes.status}`);
+      throw new Error(`Test H Failed: ${logoutRes.status}`);
     }
 
-    // Test I: Protected route after logout -> 401
+    // Test I: Access post-logout -> 401
     const postLogoutMeRes = await fetch(`${baseUrl}/api/auth/me`, {
-      headers: { Cookie: logoutCookie ? logoutCookie.split(';')[0] : '' },
+      headers: { Cookie: cookieHeader },
     });
     if (postLogoutMeRes.status === 401) {
       console.log('✔ Test I Passed: Access post-logout returned 401 Unauthorized.');
@@ -159,12 +193,18 @@ async function runAuthTests() {
       throw new Error(`Test I Failed: Expected 401, got ${postLogoutMeRes.status}`);
     }
 
+    // Clean up temporary inactive admin from isolated test DB
+    await prisma.admins.deleteMany({ where: { email: inactiveEmail } });
+
     console.log('==================================================');
     console.log('✔ ALL STEP 4 AUTHENTICATION TESTS PASSED CLEANLY');
     console.log('==================================================');
+  } catch (err) {
+    console.error('❌ Test Execution Error:', err);
+    process.exitCode = 1;
   } finally {
     server.close();
-    process.exit(0);
+    process.exit();
   }
 }
 

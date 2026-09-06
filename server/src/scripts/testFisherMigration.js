@@ -1,13 +1,45 @@
+// 1. HARD TEST ENVIRONMENT OVERRIDES - MUST BE AT THE VERY TOP BEFORE ANY IMPORTS
+process.env.NODE_ENV = 'test';
+process.env.DB_NAME = 'valachchenai_harbor_test';
+process.env.DATABASE_URL = 'mysql://root:@127.0.0.1:3306/valachchenai_harbor_test';
+
+// 2. HARD TEST DB GUARD PRE-CHECKS
+if (process.env.DB_NAME !== 'valachchenai_harbor_test') {
+  throw new Error(`FATAL: HARD TEST DB GUARD FAILED! process.env.DB_NAME is '${process.env.DB_NAME}', expected 'valachchenai_harbor_test'. Aborting test execution.`);
+}
+
+if (!process.env.DATABASE_URL.includes('/valachchenai_harbor_test')) {
+  throw new Error(`FATAL: HARD TEST DB GUARD FAILED! process.env.DATABASE_URL does not target 'valachchenai_harbor_test'. Aborting test execution.`);
+}
+
+// 3. Module Imports
 const http = require('http');
 const prisma = require('../config/prismaClient');
 const db = require('../config/db');
+const env = require('../config/env');
 const bcrypt = require('bcrypt');
 const app = require('../app');
+
+if (env.db.database !== 'valachchenai_harbor_test') {
+  throw new Error(`FATAL: HARD TEST DB GUARD FAILED! env.db.database resolved to '${env.db.database}', expected 'valachchenai_harbor_test'. Aborting.`);
+}
 
 async function runFisherTests() {
   console.log('==================================================');
   console.log('   PRISMA STEP 5: FISHER MIGRATION TEST SUITE');
   console.log('==================================================');
+
+  // Query MySQL for DATABASE() on both mysql2 and Prisma to verify live connection target
+  const [rawDbRes] = await db.query('SELECT DATABASE() as currentDb');
+  const mysql2Db = rawDbRes[0]?.currentDb;
+
+  const prismaDbRes = await prisma.$queryRaw`SELECT DATABASE() as currentDb`;
+  const prismaDb = prismaDbRes[0]?.currentDb;
+
+  if (mysql2Db !== 'valachchenai_harbor_test' || prismaDb !== 'valachchenai_harbor_test') {
+    throw new Error(`FATAL: DB ISOLATION FAILURE! mysql2='${mysql2Db}', Prisma='${prismaDb}'. Must be 'valachchenai_harbor_test'.`);
+  }
+  console.log(`✔ HARD TEST DB GUARD VERIFIED: mysql2='${mysql2Db}', Prisma='${prismaDb}' (ISOLATED TEST DB ONLY).`);
 
   // Start HTTP server on port 5098
   const server = http.createServer(app);
@@ -17,12 +49,19 @@ async function runFisherTests() {
   const baseUrl = 'http://127.0.0.1:5098';
 
   try {
-    // 1. Authenticate as Admin
+    // Authenticate Admin inside test DB
     const validPass = 'Admin123!';
     const validHash = await bcrypt.hash(validPass, 12);
-    await prisma.admins.update({
+    await prisma.admins.upsert({
       where: { email: 'admin@valachchenaiharbor.lk' },
-      data: { password_hash: validHash },
+      update: { password_hash: validHash, status: 'ACTIVE' },
+      create: {
+        name: 'System Admin',
+        email: 'admin@valachchenaiharbor.lk',
+        password_hash: validHash,
+        role: 'ADMIN',
+        status: 'ACTIVE',
+      },
     });
 
     const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
@@ -46,6 +85,8 @@ async function runFisherTests() {
 
     // Test G & J: Add Fisher (valid + phone normalization + FIS sequence generation)
     const testNic1 = '199012345678';
+    await prisma.fishers.deleteMany({ where: { nic: testNic1 } });
+
     const createRes1 = await fetch(`${baseUrl}/api/fishers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookieHeader },
@@ -200,6 +241,8 @@ async function runFisherTests() {
 
     // Test Q: Concurrent Fisher Creation Test (System Sequence Transaction Concurrency)
     console.log('--- Testing Concurrent Fisher Creation (Atomic Sequence Lock) ---');
+    await prisma.fishers.deleteMany({ where: { nic: { in: ['199100000001', '199100000002'] } } });
+
     const promise1 = fetch(`${baseUrl}/api/fishers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookieHeader },
@@ -226,20 +269,23 @@ async function runFisherTests() {
       throw new Error(`Test Q Failed: Concurrent creation failed (${JSON.stringify(resConcurrent1)}, ${JSON.stringify(resConcurrent2)})`);
     }
 
-    // Clean up created test records from development database
+    // Clean up created test records from isolated test database (valachchenai_harbor_test)
     await prisma.fishers.deleteMany({
       where: {
         id: { in: [BigInt(createdFisher1.id), BigInt(resConcurrent1.fisher.id), BigInt(resConcurrent2.fisher.id)] },
       },
     });
-    console.log('✔ Cleaned up test fixtures cleanly.');
+    console.log('✔ Cleaned up test fixtures cleanly from test DB.');
 
     console.log('==================================================');
     console.log('✔ ALL STEP 5 FISHER MIGRATION TESTS PASSED CLEANLY');
     console.log('==================================================');
+  } catch (err) {
+    console.error('❌ Test Execution Error:', err);
+    process.exitCode = 1;
   } finally {
     server.close();
-    process.exit(0);
+    process.exit();
   }
 }
 
