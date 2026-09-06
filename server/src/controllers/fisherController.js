@@ -1,6 +1,18 @@
-const db = require('../config/db');
+const prisma = require('../config/prismaClient');
 const { validateSriLankanNIC, normalizeSriLankanPhone } = require('../utils/validation');
 const { logAudit } = require('../services/auditService');
+
+/**
+ * Helper to map Prisma fisher record into safe JSON response format (BigInt -> Number)
+ */
+const mapFisherResponse = (fisher) => {
+  if (!fisher) return null;
+  return {
+    ...fisher,
+    id: typeof fisher.id === 'bigint' ? Number(fisher.id) : fisher.id,
+    created_by_admin_id: fisher.created_by_admin_id ? Number(fisher.created_by_admin_id) : null,
+  };
+};
 
 /**
  * GET /api/fishers
@@ -22,41 +34,36 @@ const getFishers = async (req, res, next) => {
 
     const { getFisherClearanceStatus } = require('../services/financialService');
 
-    // 1. Build archive & search conditions
-    const whereConditions = [];
-    const queryParams = [];
+    // 1. Build archive & search conditions for Prisma findMany
+    const whereConditions = {};
 
     if (archiveStatus === 'ARCHIVED') {
-      whereConditions.push('is_archived = TRUE');
+      whereConditions.is_archived = true;
     } else if (archiveStatus !== 'ALL') {
-      whereConditions.push('is_archived = FALSE');
+      whereConditions.is_archived = false;
     }
 
     const trimmedSearch = search.trim();
     if (trimmedSearch) {
-      whereConditions.push(
-        '(fisher_id LIKE ? OR full_name LIKE ? OR nic LIKE ? OR phone LIKE ? OR boat_no LIKE ?)'
-      );
-      const searchPattern = `%${trimmedSearch}%`;
-      queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+      whereConditions.OR = [
+        { fisher_id: { contains: trimmedSearch } },
+        { full_name: { contains: trimmedSearch } },
+        { nic: { contains: trimmedSearch } },
+        { phone: { contains: trimmedSearch } },
+        { boat_no: { contains: trimmedSearch } },
+      ];
     }
 
-    const whereSql = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
-
-    // 2. Fetch matching fishers for effective status enrichment & filtering
-    const listSql = `
-      SELECT 
-        id, fisher_id, full_name, nic, phone, boat_no, address, notes, status, is_archived,
-        created_by_admin_id, created_at, updated_at
-      FROM fishers
-      ${whereSql}
-      ORDER BY id DESC
-    `;
-    const [rawItems] = await db.query(listSql, queryParams);
+    // 2. Fetch matching fishers via Prisma
+    const rawItems = await prisma.fishers.findMany({
+      where: whereConditions,
+      orderBy: { id: 'desc' },
+    });
 
     // Enrich items with effective clearance status without mutating base status
     const enrichedItems = await Promise.all(
-      rawItems.map(async (item) => {
+      rawItems.map(async (rawItem) => {
+        const item = mapFisherResponse(rawItem);
         const clearance = await getFisherClearanceStatus(item.id);
         return {
           ...item,
@@ -82,7 +89,9 @@ const getFishers = async (req, res, next) => {
     const items = filteredItems.slice(offset, offset + limitNum);
 
     // 3. Global real database counts across all fishers using getFisherClearanceStatus
-    const [allFishersForCounts] = await db.query('SELECT id, is_archived FROM fishers');
+    const allFishersForCounts = await prisma.fishers.findMany({
+      select: { id: true, is_archived: true },
+    });
 
     let count_all = 0;
     let count_active = 0;
@@ -91,11 +100,12 @@ const getFishers = async (req, res, next) => {
     let count_archived = 0;
 
     for (const f of allFishersForCounts) {
+      const fId = Number(f.id);
       if (f.is_archived) {
         count_archived += 1;
       } else {
         count_all += 1;
-        const clearance = await getFisherClearanceStatus(f.id);
+        const clearance = await getFisherClearanceStatus(fId);
         if (clearance.status === 'HOLD') {
           count_blocked += 1;
         } else if (clearance.status === 'PENDING') {
@@ -137,13 +147,17 @@ const getFishers = async (req, res, next) => {
 const getFisherById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const [rows] = await db.query(
-      `SELECT id, fisher_id, full_name, nic, phone, boat_no, address, notes, status, is_archived, created_at, updated_at
-       FROM fishers WHERE id = ? OR fisher_id = ?`,
-      [id, id]
-    );
+    const isNumeric = !isNaN(Number(id));
 
-    if (rows.length === 0) {
+    const whereCondition = isNumeric
+      ? { OR: [{ id: BigInt(id) }, { fisher_id: id }] }
+      : { fisher_id: id };
+
+    const fisher = await prisma.fishers.findFirst({
+      where: whereCondition,
+    });
+
+    if (!fisher) {
       return res.status(404).json({
         success: false,
         message: 'Fisher not found.',
@@ -152,7 +166,7 @@ const getFisherById = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      fisher: rows[0],
+      fisher: mapFisherResponse(fisher),
     });
   } catch (error) {
     next(error);
@@ -164,7 +178,6 @@ const getFisherById = async (req, res, next) => {
  * Add a new Fisher with transaction-safe sequence Fisher ID generation (system_sequences)
  */
 const createFisher = async (req, res, next) => {
-  let connection;
   try {
     const { full_name, nic, phone, boat_no, address, notes, status = 'ACTIVE' } = req.body;
 
@@ -192,60 +205,56 @@ const createFisher = async (req, res, next) => {
       ? status.toUpperCase()
       : 'ACTIVE';
 
-    // 5. Check duplicate NIC in DB first
-    const [existingNic] = await db.query('SELECT id FROM fishers WHERE nic = ?', [normalizedNic]);
-    if (existingNic.length > 0) {
+    // 5. Check duplicate NIC in DB first via Prisma
+    const existingNic = await prisma.fishers.findUnique({
+      where: { nic: normalizedNic },
+      select: { id: true },
+    });
+    if (existingNic) {
       return res.status(409).json({
         success: false,
         message: 'A fisher with this NIC already exists.',
       });
     }
 
-    // 6. Transaction-safe Fisher ID sequence generation
-    connection = await db.getConnection();
-    await connection.beginTransaction();
+    // 6. Transaction-safe Fisher ID sequence generation via Prisma $transaction
+    const newFisher = await prisma.$transaction(async (tx) => {
+      // Lock sequence row for transaction safety
+      const seqRows = await tx.$queryRaw`
+        SELECT next_value FROM system_sequences WHERE sequence_name = 'FISHER' FOR UPDATE
+      `;
 
-    // Lock sequence row for transaction safety
-    const [seqRows] = await connection.query(
-      "SELECT next_value FROM system_sequences WHERE sequence_name = 'FISHER' FOR UPDATE"
-    );
+      let nextVal = 1;
+      if (!seqRows || seqRows.length === 0) {
+        await tx.$executeRaw`
+          INSERT INTO system_sequences (sequence_name, next_value) VALUES ('FISHER', 2)
+        `;
+      } else {
+        nextVal = Number(seqRows[0].next_value);
+        await tx.$executeRaw`
+          UPDATE system_sequences SET next_value = next_value + 1 WHERE sequence_name = 'FISHER'
+        `;
+      }
 
-    let nextVal = 1;
-    if (seqRows.length === 0) {
-      await connection.query(
-        "INSERT INTO system_sequences (sequence_name, next_value) VALUES ('FISHER', 2)"
-      );
-    } else {
-      nextVal = seqRows[0].next_value;
-      await connection.query(
-        "UPDATE system_sequences SET next_value = next_value + 1 WHERE sequence_name = 'FISHER'"
-      );
-    }
+      const formattedFisherId = `FIS-${String(nextVal).padStart(6, '0')}`;
 
-    const formattedFisherId = `FIS-${String(nextVal).padStart(6, '0')}`;
+      // Insert Fisher with generated fisher_id directly
+      return await tx.fishers.create({
+        data: {
+          fisher_id: formattedFisherId,
+          full_name: full_name.trim(),
+          nic: normalizedNic,
+          phone: normalizedPhone,
+          boat_no: boat_no ? boat_no.trim() : null,
+          address: address ? address.trim() : null,
+          notes: notes ? notes.trim() : null,
+          status: validStatus,
+          created_by_admin_id: req.admin?.id || null,
+        },
+      });
+    });
 
-    // Insert Fisher with FINAL generated fisher_id directly
-    const [insertResult] = await connection.query(
-      `INSERT INTO fishers (fisher_id, full_name, nic, phone, boat_no, address, notes, status, created_by_admin_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        formattedFisherId,
-        full_name.trim(),
-        normalizedNic,
-        normalizedPhone,
-        boat_no ? boat_no.trim() : null,
-        address ? address.trim() : null,
-        notes ? notes.trim() : null,
-        validStatus,
-        req.admin?.id || null,
-      ]
-    );
-
-    await connection.commit();
-    connection.release();
-    connection = null;
-
-    const newFisherId = insertResult.insertId;
+    const newFisherMapped = mapFisherResponse(newFisher);
 
     // Log Audit
     await logAudit({
@@ -254,36 +263,30 @@ const createFisher = async (req, res, next) => {
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
       metadata: {
-        id: newFisherId,
-        fisherId: formattedFisherId,
+        id: newFisherMapped.id,
+        fisherId: newFisherMapped.fisher_id,
         fullName: full_name.trim(),
         nic: normalizedNic,
         status: validStatus,
       },
     });
 
-    // Fetch created fisher row
-    const [newRows] = await db.query('SELECT * FROM fishers WHERE id = ?', [newFisherId]);
-
     return res.status(201).json({
       success: true,
       message: 'Fisher registered successfully.',
-      fisher: newRows[0],
+      fisher: newFisherMapped,
     });
   } catch (error) {
-    if (connection) {
-      await connection.rollback();
-      connection.release();
-    }
-    // Handle MySQL unique key constraint error safely
-    if (error.code === 'ER_DUP_ENTRY') {
-      if (error.message.includes('nic')) {
+    // Handle Prisma unique constraint error safely
+    if (error.code === 'P2002') {
+      const target = error.meta?.target;
+      if (Array.isArray(target) && target.includes('nic')) {
         return res.status(409).json({
           success: false,
           message: 'A fisher with this NIC already exists.',
         });
       }
-      if (error.message.includes('fisher_id')) {
+      if (Array.isArray(target) && target.includes('fisher_id')) {
         return res.status(409).json({
           success: false,
           message: 'A fisher with this Fisher ID already exists. Please retry.',
@@ -299,153 +302,150 @@ const createFisher = async (req, res, next) => {
  * Edit Fisher details / status
  */
 const updateFisher = async (req, res, next) => {
-  let connection;
   try {
     const { id } = req.params;
     const { full_name, nic, phone, boat_no, address, notes, status } = req.body;
+    const isNumeric = !isNaN(Number(id));
 
-    connection = await db.getConnection();
-    await connection.beginTransaction();
+    if (!isNumeric) {
+      return res.status(400).json({ success: false, message: 'Invalid fisher ID.' });
+    }
 
-    // Lock Fisher row FOR UPDATE
-    const [existingRows] = await connection.query('SELECT * FROM fishers WHERE id = ? FOR UPDATE', [id]);
-    if (existingRows.length === 0) {
-      await connection.rollback();
-      connection.release();
+    const fisherIdNum = BigInt(id);
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Lock Fisher row FOR UPDATE
+      const existingList = await tx.$queryRaw`SELECT * FROM fishers WHERE id = ${fisherIdNum} FOR UPDATE`;
+      if (!existingList || existingList.length === 0) {
+        return { notFound: true };
+      }
+      const currentFisher = existingList[0];
+
+      const updateData = {};
+
+      // Full name
+      if (full_name !== undefined) {
+        if (!full_name || typeof full_name !== 'string' || !full_name.trim()) {
+          return { error: { status: 400, message: 'Full name cannot be empty.' } };
+        }
+        updateData.full_name = full_name.trim();
+      }
+
+      // NIC
+      if (nic !== undefined && nic !== currentFisher.nic) {
+        const nicResult = validateSriLankanNIC(nic);
+        if (!nicResult.isValid) {
+          return { error: { status: 400, message: nicResult.error } };
+        }
+        const normalizedNic = nicResult.normalizedNic;
+
+        // Check NIC uniqueness
+        const dup = await tx.fishers.findFirst({
+          where: {
+            nic: normalizedNic,
+            id: { not: fisherIdNum },
+          },
+          select: { id: true },
+        });
+        if (dup) {
+          return { error: { status: 409, message: 'A fisher with this NIC already exists.' } };
+        }
+        updateData.nic = normalizedNic;
+      }
+
+      // Phone
+      if (phone !== undefined) {
+        const phoneResult = normalizeSriLankanPhone(phone);
+        if (!phoneResult.isValid) {
+          return { error: { status: 400, message: phoneResult.error } };
+        }
+        updateData.phone = phoneResult.normalizedPhone;
+      }
+
+      // Boat No
+      if (boat_no !== undefined) {
+        updateData.boat_no = boat_no ? boat_no.trim() : null;
+      }
+
+      // Address
+      if (address !== undefined) {
+        updateData.address = address ? address.trim() : null;
+      }
+
+      // Notes
+      if (notes !== undefined) {
+        updateData.notes = notes ? notes.trim() : null;
+      }
+
+      // Status transition
+      let statusChanged = false;
+      let oldStatus = currentFisher.status;
+      let newStatus = currentFisher.status;
+
+      if (status !== undefined && status !== currentFisher.status) {
+        if (['ACTIVE', 'BLOCKED', 'PENDING'].includes(status?.toUpperCase())) {
+          newStatus = status.toUpperCase();
+          updateData.status = newStatus;
+          statusChanged = true;
+        }
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return { noChanges: true, fisher: mapFisherResponse(currentFisher) };
+      }
+
+      const updated = await tx.fishers.update({
+        where: { id: fisherIdNum },
+        data: updateData,
+      });
+
+      return {
+        updated: mapFisherResponse(updated),
+        statusChanged,
+        oldStatus,
+        newStatus,
+        fisherId: currentFisher.fisher_id,
+      };
+    });
+
+    if (result.notFound) {
       return res.status(404).json({ success: false, message: 'Fisher not found.' });
     }
-    const currentFisher = existingRows[0];
 
-    const updates = [];
-    const queryParams = [];
-
-    // Full name
-    if (full_name !== undefined) {
-      if (!full_name || typeof full_name !== 'string' || !full_name.trim()) {
-        await connection.rollback();
-        connection.release();
-        return res.status(400).json({ success: false, message: 'Full name cannot be empty.' });
-      }
-      updates.push('full_name = ?');
-      queryParams.push(full_name.trim());
+    if (result.error) {
+      return res.status(result.error.status).json({ success: false, message: result.error.message });
     }
 
-    // NIC
-    if (nic !== undefined && nic !== currentFisher.nic) {
-      const nicResult = validateSriLankanNIC(nic);
-      if (!nicResult.isValid) {
-        await connection.rollback();
-        connection.release();
-        return res.status(400).json({ success: false, message: nicResult.error });
-      }
-      const normalizedNic = nicResult.normalizedNic;
-
-      // Check NIC uniqueness
-      const [dup] = await connection.query('SELECT id FROM fishers WHERE nic = ? AND id != ?', [
-        normalizedNic,
-        id,
-      ]);
-      if (dup.length > 0) {
-        await connection.rollback();
-        connection.release();
-        return res.status(409).json({
-          success: false,
-          message: 'A fisher with this NIC already exists.',
-        });
-      }
-      updates.push('nic = ?');
-      queryParams.push(normalizedNic);
-    }
-
-    // Phone
-    if (phone !== undefined) {
-      const phoneResult = normalizeSriLankanPhone(phone);
-      if (!phoneResult.isValid) {
-        await connection.rollback();
-        connection.release();
-        return res.status(400).json({ success: false, message: phoneResult.error });
-      }
-      updates.push('phone = ?');
-      queryParams.push(phoneResult.normalizedPhone);
-    }
-
-    // Boat No
-    if (boat_no !== undefined) {
-      updates.push('boat_no = ?');
-      queryParams.push(boat_no ? boat_no.trim() : null);
-    }
-
-    // Address
-    if (address !== undefined) {
-      updates.push('address = ?');
-      queryParams.push(address ? address.trim() : null);
-    }
-
-    // Notes
-    if (notes !== undefined) {
-      updates.push('notes = ?');
-      queryParams.push(notes ? notes.trim() : null);
-    }
-
-    // Status transition
-    let statusChanged = false;
-    let oldStatus = currentFisher.status;
-    let newStatus = currentFisher.status;
-
-    if (status !== undefined && status !== currentFisher.status) {
-      if (['ACTIVE', 'BLOCKED', 'PENDING'].includes(status?.toUpperCase())) {
-        newStatus = status.toUpperCase();
-        updates.push('status = ?');
-        queryParams.push(newStatus);
-        statusChanged = true;
-      }
-    }
-
-    if (updates.length === 0) {
-      await connection.rollback();
-      connection.release();
+    if (result.noChanges) {
       return res.status(200).json({
         success: true,
         message: 'No changes provided.',
-        fisher: currentFisher,
+        fisher: result.fisher,
       });
     }
 
-    queryParams.push(id);
-    await connection.query(`UPDATE fishers SET ${updates.join(', ')} WHERE id = ?`, queryParams);
-
-    await connection.commit();
-    connection.release();
-    connection = null;
-
     // Audit Logging
-    const action = statusChanged ? 'FISHER_STATUS_CHANGED' : 'FISHER_UPDATED';
+    const action = result.statusChanged ? 'FISHER_STATUS_CHANGED' : 'FISHER_UPDATED';
     await logAudit({
       adminId: req.admin?.id || null,
       action,
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
       metadata: {
-        id,
-        fisherId: currentFisher.fisher_id,
-        oldStatus,
-        newStatus,
+        id: Number(id),
+        fisherId: result.fisherId,
+        oldStatus: result.oldStatus,
+        newStatus: result.newStatus,
       },
     });
-
-    const [updatedRows] = await db.query('SELECT * FROM fishers WHERE id = ?', [id]);
 
     return res.status(200).json({
       success: true,
       message: 'Fisher record updated successfully.',
-      fisher: updatedRows[0],
+      fisher: result.updated,
     });
   } catch (error) {
-    if (connection) {
-      await connection.rollback();
-      connection.release();
-    }
-    if (error.code === 'ER_DUP_ENTRY' && error.message.includes('nic')) {
+    if (error.code === 'P2002') {
       return res.status(409).json({
         success: false,
         message: 'A fisher with this NIC already exists.',
@@ -460,45 +460,44 @@ const updateFisher = async (req, res, next) => {
  * Soft archive Fisher
  */
 const archiveFisher = async (req, res, next) => {
-  let connection;
   try {
     const { id } = req.params;
-    connection = await db.getConnection();
-    await connection.beginTransaction();
+    const isNumeric = !isNaN(Number(id));
+    if (!isNumeric) {
+      return res.status(400).json({ success: false, message: 'Invalid fisher ID.' });
+    }
 
-    const [existing] = await connection.query('SELECT * FROM fishers WHERE id = ? FOR UPDATE', [id]);
-    if (existing.length === 0) {
-      await connection.rollback();
-      connection.release();
+    const fisherIdNum = BigInt(id);
+
+    const existing = await prisma.fishers.findUnique({
+      where: { id: fisherIdNum },
+    });
+
+    if (!existing) {
       return res.status(404).json({ success: false, message: 'Fisher not found.' });
     }
 
-    await connection.query('UPDATE fishers SET is_archived = TRUE WHERE id = ?', [id]);
+    const updated = await prisma.fishers.update({
+      where: { id: fisherIdNum },
+      data: { is_archived: true },
+    });
 
-    await connection.commit();
-    connection.release();
-    connection = null;
+    const mapped = mapFisherResponse(updated);
 
     await logAudit({
       adminId: req.admin?.id || null,
       action: 'FISHER_ARCHIVED',
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
-      metadata: { id, fisherId: existing[0].fisher_id, fullName: existing[0].full_name },
+      metadata: { id: mapped.id, fisherId: mapped.fisher_id, fullName: mapped.full_name },
     });
-
-    const [updated] = await db.query('SELECT * FROM fishers WHERE id = ?', [id]);
 
     return res.status(200).json({
       success: true,
       message: 'Fisher archived successfully.',
-      fisher: updated[0],
+      fisher: mapped,
     });
   } catch (error) {
-    if (connection) {
-      await connection.rollback();
-      connection.release();
-    }
     next(error);
   }
 };
@@ -508,45 +507,44 @@ const archiveFisher = async (req, res, next) => {
  * Restore archived Fisher
  */
 const restoreFisher = async (req, res, next) => {
-  let connection;
   try {
     const { id } = req.params;
-    connection = await db.getConnection();
-    await connection.beginTransaction();
+    const isNumeric = !isNaN(Number(id));
+    if (!isNumeric) {
+      return res.status(400).json({ success: false, message: 'Invalid fisher ID.' });
+    }
 
-    const [existing] = await connection.query('SELECT * FROM fishers WHERE id = ? FOR UPDATE', [id]);
-    if (existing.length === 0) {
-      await connection.rollback();
-      connection.release();
+    const fisherIdNum = BigInt(id);
+
+    const existing = await prisma.fishers.findUnique({
+      where: { id: fisherIdNum },
+    });
+
+    if (!existing) {
       return res.status(404).json({ success: false, message: 'Fisher not found.' });
     }
 
-    await connection.query('UPDATE fishers SET is_archived = FALSE WHERE id = ?', [id]);
+    const updated = await prisma.fishers.update({
+      where: { id: fisherIdNum },
+      data: { is_archived: false },
+    });
 
-    await connection.commit();
-    connection.release();
-    connection = null;
+    const mapped = mapFisherResponse(updated);
 
     await logAudit({
       adminId: req.admin?.id || null,
       action: 'FISHER_RESTORED',
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
-      metadata: { id, fisherId: existing[0].fisher_id, fullName: existing[0].full_name },
+      metadata: { id: mapped.id, fisherId: mapped.fisher_id, fullName: mapped.full_name },
     });
-
-    const [updated] = await db.query('SELECT * FROM fishers WHERE id = ?', [id]);
 
     return res.status(200).json({
       success: true,
       message: 'Fisher restored successfully.',
-      fisher: updated[0],
+      fisher: mapped,
     });
   } catch (error) {
-    if (connection) {
-      await connection.rollback();
-      connection.release();
-    }
     next(error);
   }
 };
@@ -559,3 +557,4 @@ module.exports = {
   archiveFisher,
   restoreFisher,
 };
+
