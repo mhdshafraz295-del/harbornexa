@@ -1,14 +1,14 @@
 const app = require('./app');
 const env = require('./config/env');
-const db = require('./config/db');
+const prisma = require('./config/prismaClient');
 
 const PORT = env.port;
 
 async function startServer() {
   try {
-    // Verify DB Connection Pool
-    const [rows] = await db.query('SELECT 1 + 1 AS result');
-    console.log('✔ MySQL Database Pool connected successfully.');
+    // Verify DB Connection via Prisma Engine
+    await prisma.$queryRaw`SELECT 1 + 1 AS result`;
+    console.log('✔ Prisma Database Engine connected successfully.');
 
     const server = app.listen(PORT, () => {
       console.log('==================================================');

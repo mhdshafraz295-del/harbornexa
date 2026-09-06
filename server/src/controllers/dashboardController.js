@@ -1,6 +1,5 @@
 const Decimal = require('decimal.js');
-const db = require('../config/db');
-const { getFisherClearanceStatus } = require('../services/financialService');
+const prisma = require('../config/prismaClient');
 
 function getColomboTodayDateString() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' });
@@ -8,15 +7,10 @@ function getColomboTodayDateString() {
 
 /**
  * GET /api/dashboard/metrics
- * Return clean metrics, real Phase 3 financial aggregates, and real audit log activity
+ * Return clean metrics, real Phase 3 financial aggregates, and real audit log activity via Prisma
  */
 const getMetrics = async (req, res, next) => {
   try {
-    // Check if fishers table exists in database schema
-    const [tables] = await db.query(
-      "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'fishers'"
-    );
-
     let totalFishers = 0;
     let active = 0;
     let blocked = 0;
@@ -25,59 +19,113 @@ const getMetrics = async (req, res, next) => {
     let debtHoldCount = 0;
     let paymentsTodayVal = new Decimal(0);
 
-    if (tables.length > 0) {
-      // Query all non-archived fishers
-      const [fisherRows] = await db.query(
-        'SELECT id, status FROM fishers WHERE is_archived = FALSE'
-      );
+    // Query non-archived fishers
+    const nonArchivedFishers = await prisma.fishers.findMany({
+      where: { is_archived: false },
+      select: { id: true, status: true },
+    });
 
-      totalFishers = fisherRows.length;
+    totalFishers = nonArchivedFishers.length;
+
+    if (totalFishers > 0) {
+      // Efficient bulk status aggregation (avoiding N+1 queries for 3000+ fishers)
+      const activeHolds = await prisma.fisher_holds.findMany({
+        where: { released_at: null },
+        select: { fisher_id: true },
+      });
+      const activeHoldsSet = new Set(activeHolds.map((h) => Number(h.fisher_id)));
+
+      // Fetch non-cancelled debts grouped by fisher_id
+      const debtsByFisher = await prisma.fisher_debts.groupBy({
+        by: ['fisher_id'],
+        where: {
+          status: { not: 'CANCELLED' },
+          fishers: { is_archived: false },
+        },
+        _sum: { original_amount: true },
+      });
+
+      // Fetch non-reversed payments grouped by fisher_id
+      const paymentsByFisher = await prisma.debt_payments.groupBy({
+        by: ['fisher_id'],
+        where: {
+          reversed_at: null,
+          fishers: { is_archived: false },
+        },
+        _sum: { amount: true },
+      });
+
+      const debtMap = new Map();
+      for (const d of debtsByFisher) {
+        debtMap.set(
+          Number(d.fisher_id),
+          new Decimal(d._sum.original_amount ? d._sum.original_amount.toString() : 0)
+        );
+      }
+
+      const payMap = new Map();
+      for (const p of paymentsByFisher) {
+        payMap.set(
+          Number(p.fisher_id),
+          new Decimal(p._sum.amount ? p._sum.amount.toString() : 0)
+        );
+      }
+
+      const debtHoldFisherIds = new Set();
+      for (const [fid, totDebt] of debtMap.entries()) {
+        const totPaid = payMap.get(fid) || new Decimal(0);
+        if (totDebt.minus(totPaid).gt(0)) {
+          debtHoldFisherIds.add(fid);
+        }
+      }
+
       active = 0;
       blocked = 0;
       pending = 0;
       debtHoldCount = 0;
 
-      for (const f of fisherRows) {
-        const clearance = await getFisherClearanceStatus(f.id);
+      for (const f of nonArchivedFishers) {
+        const fid = Number(f.id);
+        const hasManualHold = activeHoldsSet.has(fid) || f.status === 'BLOCKED';
+        const hasDebtHold = debtHoldFisherIds.has(fid);
 
-        if (clearance.debtHold) {
+        if (hasDebtHold) {
           debtHoldCount += 1;
         }
 
-        if (clearance.status === 'HOLD') {
-          blocked += 1;
-        } else if (clearance.status === 'PENDING') {
+        if (hasManualHold || hasDebtHold) {
+          blocked += 1; // Effective status HOLD
+        } else if (f.status === 'PENDING') {
           pending += 1;
-        } else if (clearance.status === 'CLEARED') {
-          active += 1;
+        } else {
+          active += 1; // Effective status CLEARED
         }
       }
 
-      // Phase 3 Financial Aggregates
+      // Financial Aggregates
       try {
-        const [debts] = await db.query(`
-          SELECT d.original_amount
-          FROM fisher_debts d
-          JOIN fishers f ON d.fisher_id = f.id
-          WHERE d.status != 'CANCELLED' AND f.is_archived = FALSE
-        `);
+        const debtAgg = await prisma.fisher_debts.aggregate({
+          where: {
+            status: { not: 'CANCELLED' },
+            fishers: { is_archived: false },
+          },
+          _sum: { original_amount: true },
+        });
 
-        const [payments] = await db.query(`
-          SELECT p.amount
-          FROM debt_payments p
-          JOIN fishers f ON p.fisher_id = f.id
-          WHERE p.reversed_at IS NULL AND f.is_archived = FALSE
-        `);
+        const payAgg = await prisma.debt_payments.aggregate({
+          where: {
+            reversed_at: null,
+            fishers: { is_archived: false },
+          },
+          _sum: { amount: true },
+        });
 
-        let totDebt = new Decimal(0);
-        for (const d of debts) {
-          totDebt = totDebt.plus(new Decimal(d.original_amount || 0));
-        }
-
-        let totPaid = new Decimal(0);
-        for (const p of payments) {
-          totPaid = totPaid.plus(new Decimal(p.amount || 0));
-        }
+        const totDebt = new Decimal(
+          debtAgg._sum.original_amount ? debtAgg._sum.original_amount.toString() : 0
+        );
+        const totPaid = new Decimal(
+          payAgg._sum.amount ? payAgg._sum.amount.toString() : 0
+        );
 
         outstandingDebt = totDebt.minus(totPaid);
         if (outstandingDebt.isNegative()) {
@@ -86,29 +134,38 @@ const getMetrics = async (req, res, next) => {
 
         // Payments Today in Asia/Colombo
         const colomboToday = getColomboTodayDateString();
-        const [ptRows] = await db.query(
-          `SELECT amount FROM debt_payments WHERE reversed_at IS NULL AND payment_date = ?`,
-          [colomboToday]
-        );
+        const ptRows = await prisma.$queryRaw`
+          SELECT amount FROM debt_payments WHERE reversed_at IS NULL AND payment_date = ${colomboToday}
+        `;
         for (const pt of ptRows) {
-          paymentsTodayVal = paymentsTodayVal.plus(new Decimal(pt.amount || 0));
+          paymentsTodayVal = paymentsTodayVal.plus(new Decimal(pt.amount ? pt.amount.toString() : 0));
         }
       } catch (finErr) {
-        console.warn('Phase 3 financial metrics not yet initialized:', finErr.message);
+        console.warn('Financial metrics query warning:', finErr.message);
       }
     }
 
     // Query real audit log entries for Recent Activity section
     let recentActivity = [];
     try {
-      const [activityRows] = await db.query(
-        `SELECT a.id, a.action, a.ip_address, a.created_at, adm.name as admin_name, adm.email as admin_email
-         FROM audit_logs a
-         LEFT JOIN admins adm ON a.admin_id = adm.id
-         ORDER BY a.created_at DESC
-         LIMIT 5`
-      );
-      recentActivity = activityRows;
+      const activityRows = await prisma.audit_logs.findMany({
+        take: 5,
+        orderBy: { created_at: 'desc' },
+        include: {
+          admins: {
+            select: { name: true, email: true },
+          },
+        },
+      });
+
+      recentActivity = activityRows.map((a) => ({
+        id: Number(a.id),
+        action: a.action,
+        ip_address: a.ip_address,
+        created_at: a.created_at,
+        admin_name: a.admins?.name || null,
+        admin_email: a.admins?.email || null,
+      }));
     } catch (auditErr) {
       console.warn('Failed to query audit_logs:', auditErr.message);
     }

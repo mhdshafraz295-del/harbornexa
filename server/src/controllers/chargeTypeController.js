@@ -1,5 +1,5 @@
 const Decimal = require('decimal.js');
-const db = require('../config/db');
+const prisma = require('../config/prismaClient');
 const { logAudit } = require('../services/auditService');
 
 /**
@@ -9,20 +9,21 @@ const { logAudit } = require('../services/auditService');
 const getChargeTypes = async (req, res, next) => {
   try {
     const { activeOnly } = req.query;
-    let sql = 'SELECT * FROM charge_types';
-    const params = [];
 
+    const where = {};
     if (activeOnly === 'true') {
-      sql += ' WHERE is_active = TRUE';
+      where.is_active = true;
     }
 
-    sql += ' ORDER BY name ASC';
-
-    const [rows] = await db.query(sql, params);
+    const rows = await prisma.charge_types.findMany({
+      where,
+      orderBy: { name: 'asc' },
+    });
 
     const chargeTypes = rows.map((ct) => ({
       ...ct,
-      default_amount: new Decimal(ct.default_amount || 0).toFixed(2),
+      id: Number(ct.id),
+      default_amount: new Decimal(ct.default_amount ? ct.default_amount.toString() : 0).toFixed(2),
       is_active: Boolean(ct.is_active),
     }));
 
@@ -59,21 +60,27 @@ const createChargeType = async (req, res, next) => {
     }
 
     // Check unique name
-    const [existing] = await db.query('SELECT id FROM charge_types WHERE name = ?', [trimmedName]);
-    if (existing.length > 0) {
+    const existing = await prisma.charge_types.findUnique({
+      where: { name: trimmedName },
+    });
+    if (existing) {
       return res.status(400).json({ success: false, message: 'A charge type with this name already exists.' });
     }
 
     const activeFlag = isActive !== undefined ? Boolean(isActive) : true;
     const adminId = req.admin?.id || 1;
 
-    const [insertRes] = await db.query(
-      `INSERT INTO charge_types (name, default_amount, description, is_active, created_by_admin_id)
-       VALUES (?, ?, ?, ?, ?)`,
-      [trimmedName, decAmount.toFixed(2), description ? description.trim() : null, activeFlag, adminId]
-    );
+    const createdRecord = await prisma.charge_types.create({
+      data: {
+        name: trimmedName,
+        default_amount: decAmount.toFixed(2),
+        description: description ? description.trim() : null,
+        is_active: activeFlag,
+        created_by_admin_id: adminId,
+      },
+    });
 
-    const newId = insertRes.insertId;
+    const newId = Number(createdRecord.id);
 
     await logAudit({
       adminId,
@@ -83,15 +90,14 @@ const createChargeType = async (req, res, next) => {
       metadata: { chargeTypeId: newId, name: trimmedName, defaultAmount: decAmount.toFixed(2) },
     });
 
-    const [createdRows] = await db.query('SELECT * FROM charge_types WHERE id = ?', [newId]);
-
     return res.status(201).json({
       success: true,
       message: 'Charge type created successfully.',
       chargeType: {
-        ...createdRows[0],
-        default_amount: new Decimal(createdRows[0].default_amount).toFixed(2),
-        is_active: Boolean(createdRows[0].is_active),
+        ...createdRecord,
+        id: newId,
+        default_amount: new Decimal(createdRecord.default_amount.toString()).toFixed(2),
+        is_active: Boolean(createdRecord.is_active),
       },
     });
   } catch (error) {
@@ -106,27 +112,34 @@ const createChargeType = async (req, res, next) => {
 const updateChargeType = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const targetId = BigInt(id);
     const { name, defaultAmount, description, isActive } = req.body;
 
-    const [existing] = await db.query('SELECT * FROM charge_types WHERE id = ?', [id]);
-    if (existing.length === 0) {
+    const existing = await prisma.charge_types.findUnique({
+      where: { id: targetId },
+    });
+
+    if (!existing) {
       return res.status(404).json({ success: false, message: 'Charge type not found.' });
     }
 
-    const updates = [];
-    const params = [];
+    const dataToUpdate = {};
 
     if (name !== undefined) {
       if (!name || typeof name !== 'string' || !name.trim()) {
         return res.status(400).json({ success: false, message: 'Charge type name cannot be empty.' });
       }
       const trimmedName = name.trim();
-      const [dup] = await db.query('SELECT id FROM charge_types WHERE name = ? AND id != ?', [trimmedName, id]);
-      if (dup.length > 0) {
+      const dup = await prisma.charge_types.findFirst({
+        where: {
+          name: trimmedName,
+          NOT: { id: targetId },
+        },
+      });
+      if (dup) {
         return res.status(400).json({ success: false, message: 'Another charge type with this name already exists.' });
       }
-      updates.push('name = ?');
-      params.push(trimmedName);
+      dataToUpdate.name = trimmedName;
     }
 
     if (defaultAmount !== undefined) {
@@ -137,55 +150,53 @@ const updateChargeType = async (req, res, next) => {
       if (decAmount.lte(0)) {
         return res.status(400).json({ success: false, message: 'Default amount must be greater than zero.' });
       }
-      updates.push('default_amount = ?');
-      params.push(decAmount.toFixed(2));
+      dataToUpdate.default_amount = decAmount.toFixed(2);
     }
 
     if (description !== undefined) {
-      updates.push('description = ?');
-      params.push(description ? description.trim() : null);
+      dataToUpdate.description = description ? description.trim() : null;
     }
 
     if (isActive !== undefined) {
-      updates.push('is_active = ?');
-      params.push(Boolean(isActive));
+      dataToUpdate.is_active = Boolean(isActive);
     }
 
-    if (updates.length === 0) {
+    if (Object.keys(dataToUpdate).length === 0) {
       return res.status(200).json({
         success: true,
         message: 'No changes provided.',
         chargeType: {
-          ...existing[0],
-          default_amount: new Decimal(existing[0].default_amount).toFixed(2),
-          is_active: Boolean(existing[0].is_active),
+          ...existing,
+          id: Number(existing.id),
+          default_amount: new Decimal(existing.default_amount.toString()).toFixed(2),
+          is_active: Boolean(existing.is_active),
         },
       });
     }
 
-    updates.push('updated_by_admin_id = ?');
-    params.push(req.admin?.id || 1);
-    params.push(id);
+    dataToUpdate.updated_by_admin_id = req.admin?.id || 1;
 
-    await db.query(`UPDATE charge_types SET ${updates.join(', ')} WHERE id = ?`, params);
+    const updated = await prisma.charge_types.update({
+      where: { id: targetId },
+      data: dataToUpdate,
+    });
 
     await logAudit({
       adminId: req.admin?.id || null,
       action: 'CHARGE_TYPE_UPDATED',
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
-      metadata: { chargeTypeId: id },
+      metadata: { chargeTypeId: Number(targetId) },
     });
-
-    const [updated] = await db.query('SELECT * FROM charge_types WHERE id = ?', [id]);
 
     return res.status(200).json({
       success: true,
       message: 'Charge type updated successfully.',
       chargeType: {
-        ...updated[0],
-        default_amount: new Decimal(updated[0].default_amount).toFixed(2),
-        is_active: Boolean(updated[0].is_active),
+        ...updated,
+        id: Number(updated.id),
+        default_amount: new Decimal(updated.default_amount.toString()).toFixed(2),
+        is_active: Boolean(updated.is_active),
       },
     });
   } catch (error) {
@@ -199,22 +210,30 @@ const updateChargeType = async (req, res, next) => {
 const activateChargeType = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const [existing] = await db.query('SELECT * FROM charge_types WHERE id = ?', [id]);
-    if (existing.length === 0) {
+    const targetId = BigInt(id);
+
+    const existing = await prisma.charge_types.findUnique({
+      where: { id: targetId },
+    });
+
+    if (!existing) {
       return res.status(404).json({ success: false, message: 'Charge type not found.' });
     }
 
-    await db.query('UPDATE charge_types SET is_active = TRUE, updated_by_admin_id = ? WHERE id = ?', [
-      req.admin?.id || 1,
-      id,
-    ]);
+    await prisma.charge_types.update({
+      where: { id: targetId },
+      data: {
+        is_active: true,
+        updated_by_admin_id: req.admin?.id || 1,
+      },
+    });
 
     await logAudit({
       adminId: req.admin?.id || null,
       action: 'CHARGE_TYPE_ACTIVATED',
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
-      metadata: { chargeTypeId: id },
+      metadata: { chargeTypeId: Number(targetId) },
     });
 
     return res.status(200).json({
@@ -232,22 +251,30 @@ const activateChargeType = async (req, res, next) => {
 const deactivateChargeType = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const [existing] = await db.query('SELECT * FROM charge_types WHERE id = ?', [id]);
-    if (existing.length === 0) {
+    const targetId = BigInt(id);
+
+    const existing = await prisma.charge_types.findUnique({
+      where: { id: targetId },
+    });
+
+    if (!existing) {
       return res.status(404).json({ success: false, message: 'Charge type not found.' });
     }
 
-    await db.query('UPDATE charge_types SET is_active = FALSE, updated_by_admin_id = ? WHERE id = ?', [
-      req.admin?.id || 1,
-      id,
-    ]);
+    await prisma.charge_types.update({
+      where: { id: targetId },
+      data: {
+        is_active: false,
+        updated_by_admin_id: req.admin?.id || 1,
+      },
+    });
 
     await logAudit({
       adminId: req.admin?.id || null,
       action: 'CHARGE_TYPE_DEACTIVATED',
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
-      metadata: { chargeTypeId: id },
+      metadata: { chargeTypeId: Number(targetId) },
     });
 
     return res.status(200).json({
