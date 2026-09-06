@@ -1,4 +1,4 @@
-const mysql = require('mysql2/promise');
+const prisma = require('../config/prismaClient');
 const bcrypt = require('bcrypt');
 const readline = require('readline');
 const env = require('../config/env');
@@ -60,19 +60,10 @@ async function createAdmin() {
     process.exit(1);
   }
 
-  let connection;
   try {
-    connection = await mysql.createConnection({
-      host: env.db.host,
-      port: env.db.port,
-      user: env.db.user,
-      password: env.db.password,
-      database: env.db.database,
-    });
-
     // Check if email exists
-    const [existing] = await connection.query('SELECT id FROM admins WHERE email = ?', [email]);
-    if (existing.length > 0) {
+    const existing = await prisma.admins.findUnique({ where: { email } });
+    if (existing) {
       console.error(`❌ Error: An admin with email "${email}" already exists.`);
       process.exit(1);
     }
@@ -81,28 +72,30 @@ async function createAdmin() {
     const passwordHash = await bcrypt.hash(password, 12);
 
     // Insert admin record securely
-    const [result] = await connection.query(
-      `INSERT INTO admins (name, email, password_hash, role, status)
-       VALUES (?, ?, ?, 'ADMIN', 'ACTIVE')`,
-      [name, email, passwordHash]
-    );
+    const admin = await prisma.admins.create({
+      data: {
+        name,
+        email,
+        password_hash: passwordHash,
+        role: 'ADMIN',
+        status: 'ACTIVE',
+      },
+    });
 
     console.log('--------------------------------------------------');
     console.log(`✔ Admin created successfully!`);
-    console.log(`  Admin ID : ${result.insertId}`);
+    console.log(`  Admin ID : ${admin.id}`);
     console.log(`  Name     : ${name}`);
     console.log(`  Email    : ${email}`);
-    console.log(`  Role     : ADMIN`);
-    console.log(`  Status   : ACTIVE`);
+    console.log(`  Role     : ${admin.role}`);
+    console.log(`  Status   : ${admin.status}`);
     console.log('--------------------------------------------------');
     console.log('NOTE: Password has been securely hashed. Plaintext is never stored or displayed.');
   } catch (error) {
     console.error('❌ Failed to create admin:', error.message);
     process.exit(1);
   } finally {
-    if (connection) {
-      await connection.end();
-    }
+    await prisma.$disconnect();
   }
 }
 

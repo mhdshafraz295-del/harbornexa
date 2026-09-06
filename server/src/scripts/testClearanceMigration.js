@@ -15,14 +15,9 @@ if (!process.env.DATABASE_URL.includes('/valachchenai_harbor_test')) {
 // 3. Module Imports
 const http = require('http');
 const prisma = require('../config/prismaClient');
-const db = require('../config/db');
-const env = require('../config/env');
+const { assertIsolatedTestDatabase } = require('./helpers/testDbGuard');
 const bcrypt = require('bcrypt');
 const app = require('../app');
-
-if (env.db.database !== 'valachchenai_harbor_test') {
-  throw new Error(`FATAL: HARD TEST DB GUARD FAILED! env.db.database resolved to '${env.db.database}', expected 'valachchenai_harbor_test'. Aborting.`);
-}
 
 function generateUUID() {
   return 'clr-key-' + Math.random().toString(36).substring(2, 15) + '-' + Date.now();
@@ -43,17 +38,7 @@ async function runClearanceTests() {
   console.log('   PRISMA STEP 8: CLEARANCE RECORDS TEST SUITE');
   console.log('==================================================');
 
-  // Query MySQL for DATABASE() on both mysql2 and Prisma to verify live connection target
-  const [rawDbRes] = await db.query('SELECT DATABASE() as currentDb');
-  const mysql2Db = rawDbRes[0]?.currentDb;
-
-  const prismaDbRes = await prisma.$queryRaw`SELECT DATABASE() as currentDb`;
-  const prismaDb = prismaDbRes[0]?.currentDb;
-
-  if (mysql2Db !== 'valachchenai_harbor_test' || prismaDb !== 'valachchenai_harbor_test') {
-    throw new Error(`FATAL: DB ISOLATION FAILURE! mysql2='${mysql2Db}', Prisma='${prismaDb}'. Must be 'valachchenai_harbor_test'.`);
-  }
-  console.log(`✔ HARD TEST DB GUARD VERIFIED: mysql2='${mysql2Db}', Prisma='${prismaDb}' (ISOLATED TEST DB ONLY).`);
+  await assertIsolatedTestDatabase(prisma);
 
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(5101, resolve));

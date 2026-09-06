@@ -23,7 +23,6 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.3.0",
-    "mysql2": "^3.12.0",
     "pdfmake": "0.2.23",
     "xlsx": "^0.18.5"
   },

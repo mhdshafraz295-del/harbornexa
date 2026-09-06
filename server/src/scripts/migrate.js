@@ -1,30 +1,16 @@
-const mysql = require('mysql2/promise');
+const prisma = require('../config/prismaClient');
 const env = require('../config/env');
 
 async function runMigration() {
-  console.log('--- Valachchenai Harbor Migration Tool ---');
-  console.log(`Checking connection to MySQL at ${env.db.host}:${env.db.port}...`);
+  console.log('--- Valachchenai Harbor Migration Tool (Prisma Engine) ---');
+  console.log(`Checking connection to MySQL target database \`${env.db.database}\`...`);
 
-  let connection;
   try {
-    // 1. Connect to MySQL server without database
-    connection = await mysql.createConnection({
-      host: env.db.host,
-      port: env.db.port,
-      user: env.db.user,
-      password: env.db.password,
-    });
-    console.log('✔ MySQL Server reachable successfully.');
+    // 1. Verify Prisma connectivity
+    await prisma.$queryRaw`SELECT 1`;
+    console.log('✔ MySQL Server and target database reachable via Prisma.');
 
-    // 2. Create Database if not exists (safely without dropping any existing database)
-    const dbName = env.db.database;
-    await connection.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`);
-    console.log(`✔ Database \`${dbName}\` verified/created.`);
-
-    // 3. Switch to database
-    await connection.query(`USE \`${dbName}\`;`);
-
-    // 4. Create admins table
+    // 2. Create admins table
     const createAdminsTable = `
       CREATE TABLE IF NOT EXISTS admins (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -38,10 +24,10 @@ async function runMigration() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `;
-    await connection.query(createAdminsTable);
+    await prisma.$executeRawUnsafe(createAdminsTable);
     console.log('✔ Table `admins` created or already exists.');
 
-    // 5. Create audit_logs table
+    // 3. Create audit_logs table
     const createAuditLogsTable = `
       CREATE TABLE IF NOT EXISTS audit_logs (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -54,10 +40,10 @@ async function runMigration() {
         CONSTRAINT fk_audit_logs_admin FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE SET NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `;
-    await connection.query(createAuditLogsTable);
+    await prisma.$executeRawUnsafe(createAuditLogsTable);
     console.log('✔ Table `audit_logs` created or already exists.');
 
-    // 6. Create settings table
+    // 4. Create settings table
     const createSettingsTable = `
       CREATE TABLE IF NOT EXISTS settings (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -67,28 +53,28 @@ async function runMigration() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `;
-    await connection.query(createSettingsTable);
+    await prisma.$executeRawUnsafe(createSettingsTable);
     console.log('✔ Table `settings` created or already exists.');
 
-    // 7. Create system_sequences table
+    // 5. Create system_sequences table
     const createSequencesTable = `
       CREATE TABLE IF NOT EXISTS system_sequences (
         sequence_name VARCHAR(50) PRIMARY KEY,
         next_value BIGINT NOT NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `;
-    await connection.query(createSequencesTable);
+    await prisma.$executeRawUnsafe(createSequencesTable);
     console.log('✔ Table `system_sequences` created or already exists.');
 
     // Seed sequences if not exist
-    await connection.query(`
+    await prisma.$executeRawUnsafe(`
       INSERT INTO system_sequences (sequence_name, next_value)
       VALUES ('FISHER', 1), ('CLEARANCE', 1)
       ON DUPLICATE KEY UPDATE sequence_name = sequence_name;
     `);
     console.log('✔ Sequences `FISHER` and `CLEARANCE` seeded.');
 
-    // 8. Create fishers table
+    // 6. Create fishers table
     const createFishersTable = `
       CREATE TABLE IF NOT EXISTS fishers (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -112,10 +98,10 @@ async function runMigration() {
         INDEX idx_fishers_is_archived (is_archived)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `;
-    await connection.query(createFishersTable);
+    await prisma.$executeRawUnsafe(createFishersTable);
     console.log('✔ Table `fishers` created with indexes or already exists.');
 
-    // 9. Create charge_types table
+    // 7. Create charge_types table
     const createChargeTypesTable = `
       CREATE TABLE IF NOT EXISTS charge_types (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -132,10 +118,10 @@ async function runMigration() {
         INDEX idx_charge_types_is_active (is_active)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `;
-    await connection.query(createChargeTypesTable);
+    await prisma.$executeRawUnsafe(createChargeTypesTable);
     console.log('✔ Table `charge_types` created or already exists.');
 
-    // 10. Create fisher_debts table
+    // 8. Create fisher_debts table
     const createDebtsTable = `
       CREATE TABLE IF NOT EXISTS fisher_debts (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -164,16 +150,17 @@ async function runMigration() {
         INDEX idx_debts_due_date (due_date)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `;
-    await connection.query(createDebtsTable);
+    await prisma.$executeRawUnsafe(createDebtsTable);
     console.log('✔ Table `fisher_debts` created or already exists.');
 
     // Ensure charge_type_id column exists if fisher_debts was previously created
-    const [chargeTypeCol] = await connection.query(`
+    const dbName = env.db.database;
+    const chargeTypeCol = await prisma.$queryRaw`
       SELECT COLUMN_NAME FROM information_schema.COLUMNS 
-      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'fisher_debts' AND COLUMN_NAME = 'charge_type_id'
-    `, [dbName]);
-    if (chargeTypeCol.length === 0) {
-      await connection.query(`
+      WHERE TABLE_SCHEMA = ${dbName} AND TABLE_NAME = 'fisher_debts' AND COLUMN_NAME = 'charge_type_id'
+    `;
+    if (!chargeTypeCol || chargeTypeCol.length === 0) {
+      await prisma.$executeRawUnsafe(`
         ALTER TABLE fisher_debts 
         ADD COLUMN charge_type_id BIGINT NULL AFTER fisher_id,
         ADD CONSTRAINT fk_debts_charge_type FOREIGN KEY (charge_type_id) REFERENCES charge_types(id) ON DELETE SET NULL;
@@ -181,7 +168,7 @@ async function runMigration() {
       console.log('✔ Added `charge_type_id` column to `fisher_debts`.');
     }
 
-    // 11. Create debt_payments table
+    // 9. Create debt_payments table
     const createPaymentsTable = `
       CREATE TABLE IF NOT EXISTS debt_payments (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -208,10 +195,10 @@ async function runMigration() {
         INDEX idx_payments_reversed_at (reversed_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `;
-    await connection.query(createPaymentsTable);
+    await prisma.$executeRawUnsafe(createPaymentsTable);
     console.log('✔ Table `debt_payments` created or already exists.');
 
-    // 12. Create fisher_holds table
+    // 10. Create fisher_holds table
     const createHoldsTable = `
       CREATE TABLE IF NOT EXISTS fisher_holds (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -233,10 +220,10 @@ async function runMigration() {
         INDEX idx_holds_reason_code (reason_code)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `;
-    await connection.query(createHoldsTable);
+    await prisma.$executeRawUnsafe(createHoldsTable);
     console.log('✔ Table `fisher_holds` created or already exists.');
 
-    // 13. Create clearance_records table
+    // 11. Create clearance_records table
     const createClearanceRecordsTable = `
       CREATE TABLE IF NOT EXISTS clearance_records (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -258,11 +245,11 @@ async function runMigration() {
         INDEX idx_clearance_status (clearance_status)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `;
-    await connection.query(createClearanceRecordsTable);
+    await prisma.$executeRawUnsafe(createClearanceRecordsTable);
     console.log('✔ Table `clearance_records` created or already exists.');
 
-    // 15. Drop unused fisher_bcl_records table if exists
-    await connection.query('DROP TABLE IF EXISTS fisher_bcl_records;');
+    // 12. Drop unused fisher_bcl_records table if exists
+    await prisma.$executeRawUnsafe('DROP TABLE IF EXISTS fisher_bcl_records;');
     console.log('✔ Table `fisher_bcl_records` removed (unused legacy table).');
 
     console.log('-------------------------------------------');
@@ -271,9 +258,7 @@ async function runMigration() {
     console.error('❌ Migration failed:', error.message);
     process.exit(1);
   } finally {
-    if (connection) {
-      await connection.end();
-    }
+    await prisma.$disconnect();
   }
 }
 
