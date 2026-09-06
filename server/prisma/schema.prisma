@@ -1,0 +1,11 @@
+// Prisma schema for Valachchenai Harbor Fisher Clearance Management System
+// Step 1: Foundation Setup Only
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
