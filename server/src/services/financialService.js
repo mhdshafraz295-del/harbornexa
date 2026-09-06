@@ -5,17 +5,18 @@ const prisma = require('../config/prismaClient');
  * Calculates authoritative financial summary for a Fisher using decimal.js & Prisma
  * 
  * @param {number|string} fisherId 
- * @param {Object} [queryDb] Optional database connection/pool (retained for backward compatibility)
+ * @param {Object} [dbClient] Optional Prisma Client or Transaction Client
  * @returns {Promise<{ totalDebt: string, totalPaid: string, outstandingDebt: string, openDebtCount: number, paidDebtCount: number }>}
  */
-const getFisherFinancialSummary = async (fisherId, queryDb = null) => {
+const getFisherFinancialSummary = async (fisherId, dbClient = prisma) => {
+  const client = (dbClient && dbClient.fisher_debts) ? dbClient : prisma;
   const isNumeric = !isNaN(Number(fisherId));
   let realFisherId = null;
 
   if (isNumeric) {
     realFisherId = BigInt(fisherId);
   } else {
-    const f = await prisma.fishers.findFirst({
+    const f = await client.fishers.findFirst({
       where: { fisher_id: String(fisherId) },
       select: { id: true },
     });
@@ -31,8 +32,8 @@ const getFisherFinancialSummary = async (fisherId, queryDb = null) => {
     realFisherId = f.id;
   }
 
-  // Query all non-cancelled debts via Prisma
-  const debts = await prisma.fisher_debts.findMany({
+  // Query all non-cancelled debts via Prisma / Transaction Client
+  const debts = await client.fisher_debts.findMany({
     where: {
       fisher_id: realFisherId,
       status: { not: 'CANCELLED' },
@@ -44,8 +45,8 @@ const getFisherFinancialSummary = async (fisherId, queryDb = null) => {
     },
   });
 
-  // Query all non-reversed payments via Prisma
-  const payments = await prisma.debt_payments.findMany({
+  // Query all non-reversed payments via Prisma / Transaction Client
+  const payments = await client.debt_payments.findMany({
     where: {
       fisher_id: realFisherId,
       reversed_at: null,
@@ -100,18 +101,19 @@ const getFisherFinancialSummary = async (fisherId, queryDb = null) => {
  * 6. Base status ACTIVE & 0 holds -> CLEARED
  * 
  * @param {number|string} fisherId 
- * @param {Object} [queryDb] Optional database connection/pool
+ * @param {Object} [dbClient] Optional Prisma Client or Transaction Client
  * @returns {Promise<{ status: string, canProceed: boolean, debtHold: boolean, manualHold: boolean, outstandingDebt: string, reasons: Array }>}
  */
-const getFisherClearanceStatus = async (fisherId, queryDb = null) => {
+const getFisherClearanceStatus = async (fisherId, dbClient = prisma) => {
+  const client = (dbClient && dbClient.fishers) ? dbClient : prisma;
   const isNumeric = !isNaN(Number(fisherId));
 
   const whereCondition = isNumeric
     ? { OR: [{ id: BigInt(fisherId) }, { fisher_id: String(fisherId) }] }
     : { fisher_id: String(fisherId) };
 
-  // 1. Query Fisher base status & archived flag via Prisma
-  const fisher = await prisma.fishers.findFirst({
+  // 1. Query Fisher base status & archived flag via Prisma / Transaction Client
+  const fisher = await client.fishers.findFirst({
     where: whereCondition,
     select: {
       id: true,
@@ -146,8 +148,8 @@ const getFisherClearanceStatus = async (fisherId, queryDb = null) => {
     };
   }
 
-  // 2. Query active manual holds via Prisma
-  const activeHolds = await prisma.fisher_holds.findMany({
+  // 2. Query active manual holds via Prisma / Transaction Client
+  const activeHolds = await client.fisher_holds.findMany({
     where: {
       fisher_id: realFisherId,
       released_at: null,
@@ -162,8 +164,8 @@ const getFisherClearanceStatus = async (fisherId, queryDb = null) => {
     },
   });
 
-  // 3. Query financial summary
-  const summary = await getFisherFinancialSummary(realFisherId);
+  // 3. Query financial summary using SAME transaction/Prisma client
+  const summary = await getFisherFinancialSummary(realFisherId, client);
   const hasDebtHold = new Decimal(summary.outstandingDebt).gt(0);
   const hasManualHold = activeHolds.length > 0 || fisher.status === 'BLOCKED';
 
@@ -249,4 +251,3 @@ module.exports = {
   getFisherFinancialSummary,
   getFisherClearanceStatus,
 };
-
