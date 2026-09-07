@@ -6,7 +6,11 @@ export const checkDeparturePdfs = async (files) => {
     formData.append('pdfs', file, file.name);
   });
 
-  const response = await api.post('/departure-checker/check-pdfs', formData);
+  const response = await api.post('/departure-checker/check-pdfs', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
 
   return response.data;
 };
