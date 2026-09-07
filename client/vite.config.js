@@ -17,4 +17,9 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    allowedHosts: [
+      'gregarious-transformation-production.up.railway.app',
+    ],
+  },
 });
