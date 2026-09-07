@@ -17,6 +17,16 @@ import {
   Ban,
 } from 'lucide-react';
 
+const formatMoney = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number)
+    ? number.toLocaleString('en-LK', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    : '0.00';
+};
+
 export const InstallmentsPage = () => {
   const [plans, setPlans] = useState([]);
   const [eligibleDebts, setEligibleDebts] = useState([]);
@@ -349,11 +359,11 @@ export const InstallmentsPage = () => {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-medium text-slate-600">
                       <div>
                         <span className="text-[10px] uppercase font-bold text-slate-400 block">Starting Balance</span>
-                        <span className="font-bold text-slate-900">Rs. {plan.startingBalance.toLocaleString()}</span>
+                        <span className="font-bold text-slate-900">Rs. {formatMoney(plan.startingBalance)}</span>
                       </div>
                       <div>
                         <span className="text-[10px] uppercase font-bold text-slate-400 block">Monthly Installment</span>
-                        <span className="font-bold text-slate-900">Rs. {plan.monthlyInstallmentAmount.toLocaleString()}</span>
+                        <span className="font-bold text-slate-900">Rs. {formatMoney(plan.monthlyInstallmentAmount)}</span>
                       </div>
                       <div>
                         <span className="text-[10px] uppercase font-bold text-slate-400 block">First Due Date</span>
@@ -434,34 +444,38 @@ export const InstallmentsPage = () => {
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                        {plan.coverage.dues.map((due) => (
-                          <div
-                            key={due.id}
-                            className={`p-3 rounded-xl border text-xs space-y-1 ${
-                              due.isPaid
-                                ? 'bg-emerald-50/50 border-emerald-200'
-                                : due.isOverdue
-                                ? 'bg-rose-50/50 border-rose-200'
-                                : 'bg-white border-slate-200'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between font-bold">
-                              <span>Due #{due.due_sequence}</span>
-                              <span className={due.isPaid ? 'text-emerald-700' : due.isOverdue ? 'text-rose-700' : 'text-slate-600'}>
-                                {due.isPaid ? 'PAID' : due.isOverdue ? 'OVERDUE' : 'PENDING'}
-                              </span>
+                        {plan.coverage.dues.map((due, idx) => {
+                          const dueNum = due.installment_number ?? due.due_sequence ?? (idx + 1);
+                          const dueAmt = due.due_amount ?? due.amount ?? 0;
+                          return (
+                            <div
+                              key={due.id || dueNum}
+                              className={`p-3 rounded-xl border text-xs space-y-1 ${
+                                due.isPaid
+                                  ? 'bg-emerald-50/50 border-emerald-200'
+                                  : due.isOverdue
+                                  ? 'bg-rose-50/50 border-rose-200'
+                                  : 'bg-white border-slate-200'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between font-bold">
+                                <span>Due #{dueNum}</span>
+                                <span className={due.isPaid ? 'text-emerald-700' : due.isOverdue ? 'text-rose-700' : 'text-slate-600'}>
+                                  {due.isPaid ? 'PAID' : due.isOverdue ? 'OVERDUE' : 'PENDING'}
+                                </span>
+                              </div>
+                              <div className="text-[#111827] font-extrabold text-sm">
+                                Rs. {formatMoney(dueAmt)}
+                              </div>
+                              <div className="text-[11px] text-slate-500">
+                                Due: <span className="font-semibold text-slate-700">{due.due_date_str || due.dueDate}</span>
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                Grace Deadline: {due.effective_overdue_deadline_date_str || due.graceDeadline}
+                              </div>
                             </div>
-                            <div className="text-[#111827] font-extrabold text-sm">
-                              Rs. {due.amount.toLocaleString()}
-                            </div>
-                            <div className="text-[11px] text-slate-500">
-                              Due: <span className="font-semibold text-slate-700">{due.due_date_str}</span>
-                            </div>
-                            <div className="text-[10px] text-slate-400">
-                              Grace Deadline: {due.effective_overdue_deadline_date_str}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -513,7 +527,7 @@ export const InstallmentsPage = () => {
                   <option value="">-- Select Fisher & Debt --</option>
                   {eligibleDebts.map((d) => (
                     <option key={d.debtId} value={d.debtId} disabled={d.hasActivePlan}>
-                      {d.fisherName} ({d.fisherCode}) – {d.description} [Bal: Rs. {d.outstandingBalance.toLocaleString()}]
+                      {d.fisherName} ({d.fisherCode}) – {d.description} [Bal: Rs. {formatMoney(d.outstandingBalance)}]
                       {d.hasActivePlan ? ' (Active Plan Exists)' : ''}
                     </option>
                   ))}
@@ -604,12 +618,19 @@ export const InstallmentsPage = () => {
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2 max-h-40 overflow-y-auto">
                   <div className="font-bold text-slate-700">Schedule Preview ({previewSchedule.length} installments):</div>
                   <div className="space-y-1">
-                    {previewSchedule.map((due) => (
-                      <div key={due.due_sequence} className="flex justify-between font-mono text-[11px] text-slate-600">
-                        <span>#{due.due_sequence} – {due.due_date_str} (Deadline: {due.effective_overdue_deadline_date_str})</span>
-                        <span className="font-bold text-slate-900">Rs. {due.amount.toLocaleString()}</span>
-                      </div>
-                    ))}
+                    {previewSchedule.map((due, idx) => {
+                      const dueNum = due.installment_number ?? due.installmentNumber ?? due.due_sequence ?? (idx + 1);
+                      const dueAmt = due.due_amount ?? due.dueAmount ?? due.amount ?? 0;
+                      const dueDateStr = due.due_date_str ?? due.dueDateStr ?? due.dueDate ?? '';
+                      const deadlineStr = due.effective_overdue_deadline_date_str ?? due.effectiveDeadlineStr ?? due.graceDeadline ?? '';
+
+                      return (
+                        <div key={dueNum} className="flex justify-between font-mono text-[11px] text-slate-600">
+                          <span>#{dueNum} – {dueDateStr} (Deadline: {deadlineStr})</span>
+                          <span className="font-bold text-slate-900">Rs. {formatMoney(dueAmt)}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
