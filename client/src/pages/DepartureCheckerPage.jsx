@@ -29,7 +29,7 @@ export const DepartureCheckerPage = () => {
 
     // Filter only PDF files
     const validPdfFiles = files.filter(
-      (f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
+      (f) => f && (f.type === 'application/pdf' || (f.name && f.name.toLowerCase().endsWith('.pdf')))
     );
 
     if (validPdfFiles.length < files.length) {
@@ -45,9 +45,6 @@ export const DepartureCheckerPage = () => {
     } else {
       setSelectedFiles((prev) => [...prev, ...validPdfFiles]);
     }
-
-    // Reset file input value
-    e.target.value = '';
   };
 
   const handleRemoveFile = (index) => {
@@ -83,6 +80,7 @@ export const DepartureCheckerPage = () => {
       setProcessingStep('Completed');
       setBatchResult(data);
     } catch (err) {
+      console.error('Departure PDF Checker error:', err);
       setErrorMessage(err.message || 'Failed to process Departure PDFs.');
     } finally {
       setIsProcessing(false);
@@ -162,6 +160,9 @@ export const DepartureCheckerPage = () => {
               type="file"
               accept="application/pdf,.pdf"
               multiple
+              onClick={(e) => {
+                e.target.value = '';
+              }}
               onChange={handleFileSelect}
               className="hidden"
               disabled={isProcessing}

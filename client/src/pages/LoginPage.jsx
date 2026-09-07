@@ -203,9 +203,20 @@ export const LoginPage = () => {
           </form>
 
           {/* Footer Note */}
-          <div className="mt-5 pt-3 border-t border-[#E5E7EB] text-center">
+          <div className="mt-5 pt-3 border-t border-[#E5E7EB] text-center space-y-1">
             <p className="text-[11px] font-medium text-[#64748B]">
               Authorized Personnel Only • Valachchenai Harbor Authority
+            </p>
+            <p className="text-[10px] font-medium text-[#94A3B8]">
+              © 2026 Valachchenai Harbor. All rights reserved. • Designed &amp; Developed by{' '}
+              <a
+                href="https://resplendent-appreciation-production-080d.up.railway.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-[#64748B] hover:text-[#111827] hover:underline transition-colors"
+              >
+                NexGen Solution
+              </a>
             </p>
           </div>
 

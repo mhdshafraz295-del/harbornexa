@@ -276,10 +276,23 @@ export const AdminLayout = () => {
         </header>
 
         {/* Soft Gray Canvas Content Area */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 bg-[#F5F6F8] overflow-y-auto">
-          <div className="max-w-7xl mx-auto">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 bg-[#F5F6F8] overflow-y-auto flex flex-col justify-between">
+          <div className="max-w-7xl mx-auto w-full">
             <Outlet />
           </div>
+
+          {/* Footer Developer Credit */}
+          <footer className="mt-8 pt-4 border-t border-[#E5E7EB] text-center text-xs font-medium text-[#64748B] max-w-7xl mx-auto w-full">
+            © 2026 Valachchenai Harbor. All rights reserved. • Designed &amp; Developed by{' '}
+            <a
+              href="https://resplendent-appreciation-production-080d.up.railway.app/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-[#111827] hover:text-[#F5B942] hover:underline transition-colors"
+            >
+              NexGen Solution
+            </a>
+          </footer>
         </main>
       </div>
 
