@@ -68,7 +68,8 @@ function findNicsInSnippet(text) {
 }
 
 /**
- * Context-aware NIC extractor targeting Skipper and Crew sections of DFAR Departure Manifests.
+ * Context-aware NIC extractor targeting ALL Skipper and Crew NICs in DFAR Departure Manifests.
+ * Preserves every extracted Skipper + Crew NIC (both matched and NOT_FOUND).
  * Strictly ignores "Departure Approved By" officer NIC, vessel registration numbers, and phone numbers.
  */
 function extractFisherNicsFromText(rawText) {
@@ -76,9 +77,14 @@ function extractFisherNicsFromText(rawText) {
 
   const cleanedText = cleanOcrTextNoise(rawText);
   const foundNics = new Set();
-  const lines = cleanedText.split(/\r?\n/);
 
-  let inCrewSection = false;
+  // Cut text before officer approval section to prevent extracting officer NICs
+  const textBeforeApproval = cleanedText.split(
+    /departure approved by|approved by officer|issuing officer|authorized officer|officer nic/i
+  )[0];
+
+  const lines = textBeforeApproval.split(/\r?\n/);
+  let afterHeaderSection = false;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -86,64 +92,38 @@ function extractFisherNicsFromText(rawText) {
 
     const lower = line.toLowerCase();
 
-    // STOP parsing if we reach the "Departure Approved By" / Officer section
-    if (
-      lower.includes('departure approved by') ||
-      lower.includes('approved by officer') ||
-      lower.includes('issuing officer') ||
-      lower.includes('authorized officer') ||
-      lower.includes('officer nic')
-    ) {
-      break;
+    // 1. Check for Skipper section / label
+    if (lower.includes('skipper')) {
+      afterHeaderSection = true;
+      const textToSearch = line + ' ' + (lines[i + 1] || '');
+      const skipperNics = findNicsInSnippet(textToSearch);
+      skipperNics.forEach((nic) => foundNics.add(nic));
+      continue;
     }
 
-    // Entering Crew Details section
+    // 2. Entering Crew Details section
     if (
       lower.includes('detail of crew members') ||
       lower.includes('crew members') ||
       lower.includes('crew details') ||
       lower.includes('crew list') ||
-      lower.includes('fisher crew')
+      lower.includes('fisher crew') ||
+      lower.includes('crew')
     ) {
-      inCrewSection = true;
+      afterHeaderSection = true;
     }
 
-    // 1. Check for Skipper section / label
-    if (lower.includes('skipper')) {
-      const textToSearch = line + ' ' + (lines[i + 1] || '');
-      const skipperNics = findNicsInSnippet(textToSearch);
-      skipperNics.forEach((nic) => foundNics.add(nic));
-    }
-
-    // 2. Extract NICs if inside Crew section or line has Crew/Fisher context
-    if (inCrewSection || lower.includes('crew') || lower.includes('fisher') || lower.includes('member')) {
-      const crewNics = findNicsInSnippet(line);
-      crewNics.forEach((nic) => foundNics.add(nic));
+    // 3. Extract NICs if past Skipper/Header section or line has Crew/Fisher/Member context
+    if (afterHeaderSection || lower.includes('crew') || lower.includes('fisher') || lower.includes('member') || lower.includes('skipper')) {
+      const lineNics = findNicsInSnippet(line);
+      lineNics.forEach((nic) => foundNics.add(nic));
     }
   }
 
-  // 3. Fallback: If section headers were not explicitly detected, parse text prior to approval line
+  // 4. Fallback: If section markers were incomplete, extract all valid NICs from textBeforeApproval
   if (foundNics.size === 0) {
-    const textBeforeApproval = cleanedText.split(/departure approved by|approved by officer|issuing officer/i)[0];
-
-    // Explicit Skipper NIC match
-    const skipperRegex = /skipper[^\n\r\d]*?(\b(?:19|20)\d{10}\b|\b\d{9}[vVxX]\b)/gi;
-    let match;
-    while ((match = skipperRegex.exec(textBeforeApproval)) !== null) {
-      foundNics.add(match[1].toUpperCase());
-    }
-
-    // Explicit Crew NIC match
-    const crewRegex = /(?:crew|member|fisher)[^\n\r\d]*?(\b(?:19|20)\d{10}\b|\b\d{9}[vVxX]\b)/gi;
-    while ((match = crewRegex.exec(textBeforeApproval)) !== null) {
-      foundNics.add(match[1].toUpperCase());
-    }
-
-    // General match before approval line if section headers were incomplete
-    if (foundNics.size === 0) {
-      const generalNics = findNicsInSnippet(textBeforeApproval);
-      generalNics.forEach((nic) => foundNics.add(nic));
-    }
+    const fallbackNics = findNicsInSnippet(textBeforeApproval);
+    fallbackNics.forEach((nic) => foundNics.add(nic));
   }
 
   return Array.from(foundNics);
@@ -253,7 +233,7 @@ async function extractNicsFromPdfBufferWithFallback(fileBuffer) {
 /**
  * Controller: POST /api/departure-checker/check-pdfs or POST /api/departure-pdf-checker/check
  * Processes 1-5 Departure PDFs strictly in-memory and performs live BLC status checks.
- * No permanent PDF storage or R2 uploads are performed by this checker.
+ * Retains ALL extracted Skipper + Crew NICs in results (including NOT_FOUND).
  */
 const checkDeparturePdfs = async (req, res, next) => {
   try {
@@ -275,7 +255,7 @@ const checkDeparturePdfs = async (req, res, next) => {
 
     const batchId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
     
-    // Step 1: Validate file magic bytes (%PDF-) and extract NICs in memory per file
+    // Step 1: Validate file magic bytes (%PDF-) and extract ALL NICs in memory per file
     const fileDataList = [];
     const allNicsSet = new Set();
 
@@ -295,7 +275,7 @@ const checkDeparturePdfs = async (req, res, next) => {
         continue;
       }
 
-      // Extract NICs with OCR fallback order
+      // Extract ALL Skipper + Crew NICs
       const extractedNics = await extractNicsFromPdfBufferWithFallback(file.buffer);
       extractedNics.forEach((nic) => allNicsSet.add(nic));
 
@@ -342,7 +322,7 @@ const checkDeparturePdfs = async (req, res, next) => {
       clearanceCache.set(fisher.id, { clearanceResult, outcome });
     }
 
-    // Step 3: Build final read-only output & summaries per file
+    // Step 3: Map EVERY extracted NIC to result list (including NOT_FOUND)
     let totalNicsExtracted = 0;
     let totalApproved = 0;
     let totalBlc = 0;

@@ -242,7 +242,7 @@ export const DepartureCheckerPage = () => {
             </div>
 
             <div className="bg-white p-4 rounded-2xl border border-[#E5E7EB] shadow-2xs">
-              <p className="text-xs font-bold text-[#64748B]">NICs Found</p>
+              <p className="text-xs font-bold text-[#64748B]">NICs Extracted</p>
               <p className="text-2xl font-black text-[#111827] mt-1">
                 {batchResult.summary?.nicCount}
               </p>
