@@ -23,7 +23,10 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.3.0",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^3.4.120",
     "pdfmake": "0.2.23",
+    "tesseract.js": "^7.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

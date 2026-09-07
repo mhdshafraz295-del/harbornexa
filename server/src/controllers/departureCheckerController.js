@@ -1,7 +1,18 @@
 const multer = require('multer');
 const crypto = require('crypto');
+const pdfParse = require('pdf-parse');
+const { createWorker } = require('tesseract.js');
 const prisma = require('../config/prismaClient');
 const { getFisherClearanceStatus } = require('../services/financialService');
+
+// Polyfill DOMMatrix for PDF processing on modern Node environments if missing
+if (typeof global.DOMMatrix === 'undefined') {
+  global.DOMMatrix = class DOMMatrix {
+    constructor() {
+      this.a = 1; this.b = 0; this.c = 0; this.d = 1; this.e = 0; this.f = 0;
+    }
+  };
+}
 
 // Multer memory storage configuration (Max 5 files, 10MB per file)
 const storage = multer.memoryStorage();
@@ -23,37 +34,220 @@ const upload = multer({
 });
 
 /**
- * Extracts Sri Lankan NIC numbers from a PDF buffer (Old 9+V/X format & New 12-digit format)
+ * Normalizes OCR and raw text noise (e.g. "2005 2700 1738" -> "200527001738", "123456789 v" -> "123456789V")
  */
-function extractNicsFromPdfBuffer(buffer) {
-  const utf8Text = buffer.toString('utf8');
-  const latin1Text = buffer.toString('latin1');
-  const combinedText = utf8Text + '\n' + latin1Text;
+function cleanOcrTextNoise(text) {
+  if (!text) return '';
+  return text
+    .replace(/(\b\d{4})\s+(\d{4})\s+(\d{4}\b)/g, '$1$2$3')
+    .replace(/(\b\d{3})\s+(\d{3})\s+(\d{3})\s+(\d{3}\b)/g, '$1$2$3$4')
+    .replace(/(\b\d{9})\s+([vVxX]\b)/g, '$1$2');
+}
 
-  const foundNics = new Set();
+/**
+ * Helper to find valid Sri Lankan NIC numbers in a given string snippet
+ */
+function findNicsInSnippet(text) {
+  const nics = new Set();
+  if (!text) return Array.from(nics);
 
   // 1. Old Sri Lankan NIC pattern: 9 digits + V/X
   const oldNicRegex = /\b\d{9}[vVxX]\b/g;
   let match;
-  while ((match = oldNicRegex.exec(combinedText)) !== null) {
-    foundNics.add(match[0].toUpperCase());
+  while ((match = oldNicRegex.exec(text)) !== null) {
+    nics.add(match[0].toUpperCase());
   }
 
   // 2. New Sri Lankan NIC pattern: 12 digits starting with 19 or 20
   const newNicRegex = /\b(?:19|20)\d{10}\b/g;
-  while ((match = newNicRegex.exec(combinedText)) !== null) {
-    foundNics.add(match[0]);
+  while ((match = newNicRegex.exec(text)) !== null) {
+    nics.add(match[0]);
   }
 
-  // 3. Fallback 12-digit NIC regex if no 19/20 prefixed match found
+  return Array.from(nics);
+}
+
+/**
+ * Context-aware NIC extractor targeting Skipper and Crew sections of DFAR Departure Manifests.
+ * Strictly ignores "Departure Approved By" officer NIC, vessel registration numbers, and phone numbers.
+ */
+function extractFisherNicsFromText(rawText) {
+  if (!rawText || typeof rawText !== 'string') return [];
+
+  const cleanedText = cleanOcrTextNoise(rawText);
+  const foundNics = new Set();
+  const lines = cleanedText.split(/\r?\n/);
+
+  let inCrewSection = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    const lower = line.toLowerCase();
+
+    // STOP parsing if we reach the "Departure Approved By" / Officer section
+    if (
+      lower.includes('departure approved by') ||
+      lower.includes('approved by officer') ||
+      lower.includes('issuing officer') ||
+      lower.includes('authorized officer') ||
+      lower.includes('officer nic')
+    ) {
+      break;
+    }
+
+    // Entering Crew Details section
+    if (
+      lower.includes('detail of crew members') ||
+      lower.includes('crew members') ||
+      lower.includes('crew details') ||
+      lower.includes('crew list') ||
+      lower.includes('fisher crew')
+    ) {
+      inCrewSection = true;
+    }
+
+    // 1. Check for Skipper section / label
+    if (lower.includes('skipper')) {
+      const textToSearch = line + ' ' + (lines[i + 1] || '');
+      const skipperNics = findNicsInSnippet(textToSearch);
+      skipperNics.forEach((nic) => foundNics.add(nic));
+    }
+
+    // 2. Extract NICs if inside Crew section or line has Crew/Fisher context
+    if (inCrewSection || lower.includes('crew') || lower.includes('fisher') || lower.includes('member')) {
+      const crewNics = findNicsInSnippet(line);
+      crewNics.forEach((nic) => foundNics.add(nic));
+    }
+  }
+
+  // 3. Fallback: If section headers were not explicitly detected, parse text prior to approval line
   if (foundNics.size === 0) {
-    const generic12DigitRegex = /\b\d{12}\b/g;
-    while ((match = generic12DigitRegex.exec(combinedText)) !== null) {
-      foundNics.add(match[0]);
+    const textBeforeApproval = cleanedText.split(/departure approved by|approved by officer|issuing officer/i)[0];
+
+    // Explicit Skipper NIC match
+    const skipperRegex = /skipper[^\n\r\d]*?(\b(?:19|20)\d{10}\b|\b\d{9}[vVxX]\b)/gi;
+    let match;
+    while ((match = skipperRegex.exec(textBeforeApproval)) !== null) {
+      foundNics.add(match[1].toUpperCase());
+    }
+
+    // Explicit Crew NIC match
+    const crewRegex = /(?:crew|member|fisher)[^\n\r\d]*?(\b(?:19|20)\d{10}\b|\b\d{9}[vVxX]\b)/gi;
+    while ((match = crewRegex.exec(textBeforeApproval)) !== null) {
+      foundNics.add(match[1].toUpperCase());
+    }
+
+    // General match before approval line if section headers were incomplete
+    if (foundNics.size === 0) {
+      const generalNics = findNicsInSnippet(textBeforeApproval);
+      generalNics.forEach((nic) => foundNics.add(nic));
     }
   }
 
   return Array.from(foundNics);
+}
+
+/**
+ * Extracts raw image stream buffers (JPEG/PNG) embedded inside a PDF buffer
+ */
+function extractImageBuffersFromPdf(pdfBuffer) {
+  const images = [];
+  const str = pdfBuffer.toString('latin1');
+  const streamRegex = /stream[\r\n]+([\s\S]*?)endstream/g;
+  let match;
+
+  while ((match = streamRegex.exec(str)) !== null) {
+    const precedingContext = str.substring(Math.max(0, match.index - 500), match.index);
+    const isImage = precedingContext.includes('/Subtype /Image') || precedingContext.includes('/Subtype/Image') || precedingContext.includes('/DCTDecode');
+
+    if (isImage) {
+      const streamBufIndex = pdfBuffer.indexOf(Buffer.from('stream'), Math.max(0, match.index - 20));
+      if (streamBufIndex !== -1) {
+        let dataStart = streamBufIndex + 6;
+        if (pdfBuffer[dataStart] === 0x0a) dataStart++;
+        else if (pdfBuffer[dataStart] === 0x0d && pdfBuffer[dataStart + 1] === 0x0a) dataStart += 2;
+
+        const dataEnd = pdfBuffer.indexOf(Buffer.from('endstream'), dataStart);
+        if (dataEnd > dataStart) {
+          const imgBuffer = pdfBuffer.slice(dataStart, dataEnd);
+          if (imgBuffer[0] === 0xff && imgBuffer[1] === 0xd8) {
+            images.push({ type: 'jpeg', buffer: imgBuffer });
+          } else {
+            images.push({ type: 'raw', buffer: imgBuffer });
+          }
+        }
+      }
+    }
+  }
+
+  return images;
+}
+
+/**
+ * Performs OCR fallback using Tesseract.js on embedded image buffers or PDF text stream
+ */
+async function performOcrFallback(fileBuffer) {
+  const extractedNics = new Set();
+  let worker = null;
+
+  try {
+    const images = extractImageBuffersFromPdf(fileBuffer);
+    if (images.length > 0) {
+      worker = await createWorker('eng');
+      for (const img of images) {
+        const ocrResult = await worker.recognize(img.buffer);
+        const nics = extractFisherNicsFromText(ocrResult.data?.text || '');
+        nics.forEach((nic) => extractedNics.add(nic));
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ OCR processing fallback warning:', err.message);
+  } finally {
+    if (worker) {
+      await worker.terminate().catch(() => {});
+    }
+  }
+
+  return Array.from(extractedNics);
+}
+
+/**
+ * Extract NICs from PDF buffer with OCR fallback order:
+ * 1. Normal PDF text extraction (pdf-parse)
+ * 2. OCR Fallback if text layer yields 0 NICs
+ */
+async function extractNicsFromPdfBufferWithFallback(fileBuffer) {
+  // Step 1: Normal PDF text extraction first
+  try {
+    let rawText = '';
+    if (pdfParse && typeof pdfParse.PDFParse === 'function') {
+      const parser = new pdfParse.PDFParse({ data: fileBuffer });
+      const parsed = await parser.getText();
+      rawText = parsed.text || '';
+    } else if (typeof pdfParse === 'function') {
+      const data = await pdfParse(fileBuffer);
+      rawText = data.text || '';
+    }
+
+    const nicsFromText = extractFisherNicsFromText(rawText);
+    if (nicsFromText.length > 0) {
+      return nicsFromText;
+    }
+  } catch (textErr) {
+    // Silent catch, fallback to stream search and OCR
+  }
+
+  // Step 2: Fallback to string search in raw buffer
+  const rawStringText = fileBuffer.toString('utf8') + '\n' + fileBuffer.toString('latin1');
+  const nicsFromRawStr = extractFisherNicsFromText(rawStringText);
+  if (nicsFromRawStr.length > 0) {
+    return nicsFromRawStr;
+  }
+
+  // Step 3: OCR Fallback for scanned/image PDFs
+  return await performOcrFallback(fileBuffer);
 }
 
 /**
@@ -101,8 +295,8 @@ const checkDeparturePdfs = async (req, res, next) => {
         continue;
       }
 
-      // Extract NICs directly from memory buffer
-      const extractedNics = extractNicsFromPdfBuffer(file.buffer);
+      // Extract NICs with OCR fallback order
+      const extractedNics = await extractNicsFromPdfBufferWithFallback(file.buffer);
       extractedNics.forEach((nic) => allNicsSet.add(nic));
 
       fileDataList.push({
@@ -238,4 +432,5 @@ const checkDeparturePdfs = async (req, res, next) => {
 module.exports = {
   upload,
   checkDeparturePdfs,
+  extractFisherNicsFromText,
 };
