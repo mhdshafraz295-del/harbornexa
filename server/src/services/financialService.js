@@ -1,5 +1,6 @@
 const Decimal = require('decimal.js');
 const prisma = require('../config/prismaClient');
+const { calculatePlanCoverageAndStatus, getColomboCurrentDateString } = require('./installmentService');
 
 /**
  * Calculates authoritative financial summary for a Fisher using decimal.js & Prisma
@@ -96,7 +97,11 @@ const getFisherFinancialSummary = async (fisherId, dbClient = prisma) => {
  * 1. Archived -> NOT_ELIGIBLE
  * 2. Base status BLOCKED -> BASE_BLOCKED ("Manual Block – reason not recorded")
  * 3. Active fisher_holds -> Include all active manual hold reasons
- * 4. Outstanding Debt > 0 -> OUTSTANDING_DEBT
+ * 4. Installment plans & Outstanding Debt evaluation per linked debt:
+ *    - ACTIVE plan with overdue installment -> OVERDUE_INSTALLMENT
+ *    - ACTIVE/COMPLETED plan with baseline inconsistency -> MANUAL_REVIEW_REQUIRED
+ *    - ACTIVE plan current (no overdue dues) -> Suppresses legacy hold for THIS linked debt
+ *    - No plan or CANCELLED plan with outstanding balance -> OUTSTANDING_DEBT
  * 5. Base status PENDING -> PENDING
  * 6. Base status ACTIVE & 0 holds -> CLEARED
  * 
@@ -164,10 +169,49 @@ const getFisherClearanceStatus = async (fisherId, dbClient = prisma) => {
     },
   });
 
-  // 3. Query financial summary using SAME transaction/Prisma client
+  // 3. Financial summary
   const summary = await getFisherFinancialSummary(realFisherId, client);
-  const hasDebtHold = new Decimal(summary.outstandingDebt).gt(0);
-  const hasManualHold = activeHolds.length > 0 || fisher.status === 'BLOCKED';
+
+  // 4. Per-debt installment plan evaluation
+  const nonCancelledDebts = await client.fisher_debts.findMany({
+    where: {
+      fisher_id: realFisherId,
+      status: { not: 'CANCELLED' },
+    },
+    select: {
+      id: true,
+      original_amount: true,
+    },
+  });
+
+  const allDebtPayments = await client.debt_payments.findMany({
+    where: {
+      fisher_id: realFisherId,
+    },
+    select: {
+      id: true,
+      debt_id: true,
+      amount: true,
+      reversed_at: true,
+    },
+  });
+
+  const activeOrCompletedPlans = await client.installment_plans.findMany({
+    where: {
+      fisher_id: realFisherId,
+      status: { in: ['ACTIVE', 'COMPLETED'] },
+    },
+    include: {
+      installment_dues: {
+        orderBy: { installment_number: 'asc' },
+      },
+    },
+  });
+
+  const planMap = new Map();
+  for (const plan of activeOrCompletedPlans) {
+    planMap.set(plan.debt_id.toString(), plan);
+  }
 
   const reasons = [];
 
@@ -205,21 +249,75 @@ const getFisherClearanceStatus = async (fisherId, dbClient = prisma) => {
     });
   }
 
-  // Add Debt Hold reason if outstanding debt > 0
-  if (hasDebtHold) {
-    reasons.push({
-      code: 'OUTSTANDING_DEBT',
-      label: 'மீதிக் கடன்',
-      amount: summary.outstandingDebt,
-    });
+  let debtHoldTriggered = false;
+  const todayStr = getColomboCurrentDateString();
+
+  // Evaluate each debt individually
+  for (const debt of nonCancelledDebts) {
+    const debtIdStr = debt.id.toString();
+    const debtPayments = allDebtPayments.filter((p) => p.debt_id.toString() === debtIdStr);
+    const validPaidSum = debtPayments
+      .filter((p) => p.reversed_at == null)
+      .reduce((sum, p) => sum + Number(p.amount), 0);
+    const debtOriginalAmt = Number(debt.original_amount || 0);
+    const debtCurrentBalance = Math.max(0, Number((debtOriginalAmt - validPaidSum).toFixed(2)));
+
+    if (debtCurrentBalance <= 0) {
+      // Debt is fully paid, no hold
+      continue;
+    }
+
+    const linkedPlan = planMap.get(debtIdStr);
+
+    if (!linkedPlan || linkedPlan.status === 'CANCELLED') {
+      // Legacy debt with balance > 0 and no active/completed installment plan -> OUTSTANDING_DEBT
+      debtHoldTriggered = true;
+      reasons.push({
+        code: 'OUTSTANDING_DEBT',
+        label: 'மீதிக் கடன்',
+        amount: debtCurrentBalance.toFixed(2),
+        debtId: debtIdStr,
+      });
+      continue;
+    }
+
+    // Has an ACTIVE or COMPLETED linked installment plan
+    const evalRes = calculatePlanCoverageAndStatus(linkedPlan, debtPayments, debtCurrentBalance, todayStr);
+
+    if (evalRes.isManualReviewRequired) {
+      debtHoldTriggered = true;
+      reasons.push({
+        code: 'MANUAL_REVIEW_REQUIRED',
+        label: evalRes.manualReviewReason === 'PRE_PLAN_PAYMENT_REVERSED'
+          ? 'Manual Review Required – Pre-plan payment was reversed'
+          : 'Manual Review Required – Plan marked completed but debt has remaining balance',
+        debtId: debtIdStr,
+        planId: linkedPlan.id.toString(),
+        reason: evalRes.manualReviewReason,
+      });
+    } else if (evalRes.overdueDuesCount > 0) {
+      debtHoldTriggered = true;
+      reasons.push({
+        code: 'OVERDUE_INSTALLMENT',
+        label: 'நிலுவை தவணை / Overdue Installment',
+        amount: evalRes.overdueAmount.toFixed(2),
+        overdueCount: evalRes.overdueDuesCount,
+        debtId: debtIdStr,
+        planId: linkedPlan.id.toString(),
+      });
+    } else {
+      // Plan is active and current (or completed with zero balance) -> Hold for THIS debt is suppressed!
+    }
   }
+
+  const hasManualHold = activeHolds.length > 0 || fisher.status === 'BLOCKED';
 
   // Determine final effective status
   if (reasons.length > 0) {
     return {
       status: 'HOLD',
       canProceed: false,
-      debtHold: hasDebtHold,
+      debtHold: debtHoldTriggered,
       manualHold: hasManualHold,
       outstandingDebt: summary.outstandingDebt,
       reasons,

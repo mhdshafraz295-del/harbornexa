@@ -16,6 +16,7 @@ import { BlockHistoryPage } from './pages/BlockHistoryPage';
 import { ImportExportPage } from './pages/ImportExportPage';
 import { HowToUsePage } from './pages/HowToUsePage';
 import { DepartureCheckerPage } from './pages/DepartureCheckerPage';
+import { InstallmentsPage } from './pages/InstallmentsPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 
 export const App = () => {
@@ -50,6 +51,7 @@ export const App = () => {
             <Route path="fishers" element={<FishersPage />} />
             <Route path="qr-scanner" element={<QrScannerPage />} />
             <Route path="debt-payments" element={<DebtPaymentsPage />} />
+            <Route path="installments" element={<InstallmentsPage />} />
             <Route path="clearance" element={<ClearancePage />} />
             <Route path="departure-checker" element={<DepartureCheckerPage />} />
             <Route path="departure-pdf-checker" element={<DepartureCheckerPage />} />

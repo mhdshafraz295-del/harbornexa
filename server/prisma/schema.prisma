@@ -29,6 +29,8 @@ model admins {
   fisher_holds_fisher_holds_released_by_admin_idToadmins        fisher_holds[]      @relation("fisher_holds_released_by_admin_idToadmins")
   fisher_qr_tokens_fisher_qr_tokens_created_by_admin_idToadmins fisher_qr_tokens[]  @relation("fisher_qr_tokens_created_by_admin_idToadmins")
   fisher_qr_tokens_fisher_qr_tokens_revoked_by_admin_idToadmins fisher_qr_tokens[]  @relation("fisher_qr_tokens_revoked_by_admin_idToadmins")
+  installment_plans_installment_plans_created_by_admin_idToadmins installment_plans[] @relation("installment_plans_created_by_admin_idToadmins")
+  installment_plans_installment_plans_cancelled_by_admin_idToadmins installment_plans[] @relation("installment_plans_cancelled_by_admin_idToadmins")
   fishers                                                       fishers[]
 }
 
@@ -136,6 +138,7 @@ model fisher_debts {
   charge_types                                      charge_types?       @relation(fields: [charge_type_id], references: [id], onUpdate: Restrict, map: "fk_debts_charge_type")
   admins_fisher_debts_created_by_admin_idToadmins   admins              @relation("fisher_debts_created_by_admin_idToadmins", fields: [created_by_admin_id], references: [id], onUpdate: Restrict, map: "fk_debts_created_by")
   fishers                                           fishers             @relation(fields: [fisher_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_debts_fisher")
+  installment_plans                                 installment_plans?
 
   @@index([cancelled_by_admin_id], map: "fk_debts_cancelled_by")
   @@index([charge_type_id], map: "fk_debts_charge_type")
@@ -209,6 +212,7 @@ model fishers {
   fisher_debts        fisher_debts[]
   fisher_holds        fisher_holds[]
   fisher_qr_tokens    fisher_qr_tokens[]
+  installment_plans   installment_plans[]
   admins              admins?             @relation(fields: [created_by_admin_id], references: [id], onUpdate: Restrict, map: "fk_fishers_created_by")
 
   @@index([created_by_admin_id], map: "fk_fishers_created_by")
@@ -261,4 +265,54 @@ enum fisher_debts_status {
   PARTIALLY_PAID
   PAID
   CANCELLED
+}
+
+enum installment_plans_status {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model installment_plans {
+  id                                                              BigInt                   @id @default(autoincrement())
+  debt_id                                                         BigInt                   @unique(map: "idx_installment_plans_debt_id")
+  fisher_id                                                       BigInt
+  starting_balance                                                Decimal                  @db.Decimal(12, 2)
+  starting_payment_id                                             BigInt                   @default(0)
+  monthly_amount                                                  Decimal                  @db.Decimal(12, 2)
+  first_due_date                                                  DateTime                 @db.Date
+  grace_days                                                      Int                      @default(0)
+  status                                                          installment_plans_status @default(ACTIVE)
+  notes                                                           String?                  @db.Text
+  cancelled_at                                                    DateTime?                @db.DateTime(0)
+  cancelled_by_admin_id                                           Int?
+  cancellation_reason                                             String?                  @db.VarChar(500)
+  completed_at                                                    DateTime?                @db.DateTime(0)
+  created_by_admin_id                                             Int
+  created_at                                                      DateTime                 @default(now()) @db.Timestamp(0)
+  updated_at                                                      DateTime                 @default(now()) @db.Timestamp(0)
+  fisher_debts                                                    fisher_debts             @relation(fields: [debt_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_installment_plans_debt")
+  fishers                                                         fishers                  @relation(fields: [fisher_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_installment_plans_fisher")
+  admins_installment_plans_created_by_admin_idToadmins           admins                   @relation("installment_plans_created_by_admin_idToadmins", fields: [created_by_admin_id], references: [id], onUpdate: Restrict, map: "fk_installment_plans_created_by")
+  admins_installment_plans_cancelled_by_admin_idToadmins         admins?                  @relation("installment_plans_cancelled_by_admin_idToadmins", fields: [cancelled_by_admin_id], references: [id], onUpdate: Restrict, map: "fk_installment_plans_cancelled_by")
+  installment_dues                                                installment_dues[]
+
+  @@index([fisher_id], map: "idx_installment_plans_fisher_id")
+  @@index([status], map: "idx_installment_plans_status")
+  @@index([created_by_admin_id], map: "fk_installment_plans_created_by")
+  @@index([cancelled_by_admin_id], map: "fk_installment_plans_cancelled_by")
+}
+
+model installment_dues {
+  id                 BigInt            @id @default(autoincrement())
+  plan_id            BigInt
+  installment_number Int
+  due_date           DateTime          @db.Date
+  due_amount         Decimal           @db.Decimal(12, 2)
+  created_at         DateTime          @default(now()) @db.Timestamp(0)
+  installment_plans  installment_plans @relation(fields: [plan_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_installment_dues_plan")
+
+  @@unique([plan_id, installment_number], map: "idx_plan_installment_num")
+  @@index([plan_id], map: "idx_installment_dues_plan_id")
+  @@index([due_date], map: "idx_installment_dues_due_date")
 }

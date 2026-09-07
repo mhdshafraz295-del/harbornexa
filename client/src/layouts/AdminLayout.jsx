@@ -20,6 +20,7 @@ import {
   QrCode,
   FileCheck,
   HelpCircle,
+  CalendarClock,
 } from 'lucide-react';
 
 export const AdminLayout = () => {
@@ -69,6 +70,7 @@ export const AdminLayout = () => {
     { name: 'Fishers', path: '/admin/fishers', icon: Users },
     { name: 'QR Scanner', path: '/admin/qr-scanner', icon: QrCode },
     { name: 'Debt & Payments', path: '/admin/debt-payments', icon: CreditCard },
+    { name: 'Installment Mgmt', path: '/admin/installments', icon: CalendarClock },
     { name: 'Clearance', path: '/admin/clearance', icon: CheckCircle2 },
     { name: 'Departure PDF Checker', path: '/admin/departure-pdf-checker', icon: FileCheck },
     { name: 'Block History', path: '/admin/block-history', icon: Ban },
