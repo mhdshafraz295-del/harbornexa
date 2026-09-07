@@ -18,6 +18,7 @@ import {
   User,
   Shield,
   QrCode,
+  FileCheck,
   HelpCircle,
 } from 'lucide-react';
 
@@ -69,6 +70,7 @@ export const AdminLayout = () => {
     { name: 'QR Scanner', path: '/admin/qr-scanner', icon: QrCode },
     { name: 'Debt & Payments', path: '/admin/debt-payments', icon: CreditCard },
     { name: 'Clearance', path: '/admin/clearance', icon: CheckCircle2 },
+    { name: 'Departure PDF Checker', path: '/admin/departure-pdf-checker', icon: FileCheck },
     { name: 'Block History', path: '/admin/block-history', icon: Ban },
     { name: 'Import / Export', path: '/admin/import-export', icon: FileSpreadsheet },
     { name: 'How to Use', path: '/admin/how-to-use', icon: HelpCircle },

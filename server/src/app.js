@@ -12,6 +12,7 @@ const chargeTypeRoutes = require('./routes/chargeTypeRoutes');
 const clearanceRoutes = require('./routes/clearanceRoutes');
 const qrRoutes = require('./routes/qrRoutes');
 const exportRoutes = require('./routes/exportRoutes');
+const departureCheckerRoutes = require('./routes/departureCheckerRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -57,6 +58,8 @@ app.use('/api/charge-types', chargeTypeRoutes);
 app.use('/api/clearance', clearanceRoutes);
 app.use('/api/qr', qrRoutes);
 app.use('/api/export', exportRoutes);
+app.use('/api/departure-checker', departureCheckerRoutes);
+app.use('/api/departure-pdf-checker', departureCheckerRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
