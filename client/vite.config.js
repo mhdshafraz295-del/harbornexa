@@ -21,5 +21,12 @@ export default defineConfig({
     allowedHosts: [
       'gregarious-transformation-production.up.railway.app',
     ],
+    proxy: {
+      '/api': {
+        target: 'https://harbornexa-production.up.railway.app',
+        changeOrigin: true,
+        secure: true,
+      },
+    },
   },
 });
