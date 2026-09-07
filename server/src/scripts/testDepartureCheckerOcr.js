@@ -82,43 +82,14 @@ async function runDoc1PdfTests() {
 
     console.log('✔ Created test fixture: 200527001738 (APPROVED in DB). 197916704875 & 200221510039 are NOT in DB.');
 
-    // 3. Construct Synthetic Doc1.pdf containing Skipper 197916704875, Crew 200527001738, Crew 200221510039, and Officer 198899776655
-    const doc1PdfContent = `%PDF-1.4
-1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
-2 0 obj << /Type /Pages /Kinds [ /PDF ] /Count 1 /Kids [ 3 0 R ] >> endobj
-3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [ 0 0 500 400 ] /Contents 4 0 R >> endobj
-4 0 obj << /Length 260 >> stream
-BT
-/F1 12 Tf
-20 360 Td
-(DFAR DEPARTURE MANIFEST - VALACHCHENAI HARBOR) Tj
-0 -30 Td
-(Vessel Reg No: SRI-VAL-2005   License No: LIC-DOC1-88) Tj
-0 -30 Td
-(Skipper's National Identity Card No: 197916704875) Tj
-0 -30 Td
-(Detail of Crew Members) Tj
-0 -25 Td
-(1. Crew Member: 2005 2700 1738 - Name: Approved Fisher Member) Tj
-0 -25 Td
-(2. Crew Member: 2002 2151 0039 - Name: Unregistered Crew) Tj
-0 -40 Td
-(Departure Approved By Officer NIC: 198899776655) Tj
-ET
-endstream endobj
-xref
-0 5
-0000000000 65535 f 
-0000000009 00000 n 
-0000000062 00000 n 
-0000000142 00000 n 
-0000000244 00000 n 
-trailer << /Size 5 /Root 1 0 R >>
-startxref
-550
-%%EOF`;
-
-    const pdfBuffer = Buffer.from(doc1PdfContent, 'utf8');
+    // 3. Read ACTUAL user Doc1.pdf from C:\Users\mhdna\Downloads\Doc1.pdf
+    const fs = require('fs');
+    const doc1Path = 'C:\\Users\\mhdna\\Downloads\\Doc1.pdf';
+    if (!fs.existsSync(doc1Path)) {
+      throw new Error(`FATAL: Actual user file Doc1.pdf not found at ${doc1Path}`);
+    }
+    const pdfBuffer = fs.readFileSync(doc1Path);
+    console.log(`✔ Loaded actual user Doc1.pdf (${pdfBuffer.length} bytes).`);
 
     // 4. Test Batch Upload to /api/departure-pdf-checker/check
     const boundary = '----WebKitFormBoundary7MA4YWxkTrZu0gW';
