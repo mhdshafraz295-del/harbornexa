@@ -18,7 +18,7 @@ async function getEligibleDebts(req, res) {
         status: { not: 'CANCELLED' },
       },
       include: {
-        fisher: {
+        fishers: {
           select: {
             id: true,
             fisher_id: true,
@@ -39,17 +39,18 @@ async function getEligibleDebts(req, res) {
 
     const eligibleList = debts
       .map((debt) => {
+        const fisherObj = debt.fishers;
         const totalPaid = debt.debt_payments.reduce((sum, p) => sum + Number(p.amount), 0);
         const originalAmt = Number(debt.original_amount || 0);
         const outstandingBalance = Math.max(0, Number((originalAmt - totalPaid).toFixed(2)));
-        const activePlan = debt.installment_plans[0] || null;
+        const activePlan = debt.installment_plans ? debt.installment_plans : null;
 
         return {
           debtId: debt.id.toString(),
-          fisherId: debt.fisher.id.toString(),
-          fisherCode: debt.fisher.fisher_id,
-          fisherName: debt.fisher.full_name,
-          nicNumber: debt.fisher.nic,
+          fisherId: fisherObj ? fisherObj.id.toString() : '',
+          fisherCode: fisherObj ? fisherObj.fisher_id : '',
+          fisherName: fisherObj ? fisherObj.full_name : '',
+          nicNumber: fisherObj ? fisherObj.nic : '',
           description: debt.description || `Debt #${debt.id}`,
           originalAmount: originalAmt,
           totalPaid,
@@ -99,7 +100,7 @@ async function listInstallmentPlans(req, res) {
   try {
     const plans = await prisma.installment_plans.findMany({
       include: {
-        fisher: {
+        fishers: {
           select: {
             id: true,
             fisher_id: true,
@@ -107,7 +108,7 @@ async function listInstallmentPlans(req, res) {
             nic: true,
           },
         },
-        debt: {
+        fisher_debts: {
           select: {
             id: true,
             original_amount: true,
@@ -125,11 +126,11 @@ async function listInstallmentPlans(req, res) {
         installment_dues: {
           orderBy: { installment_number: 'asc' },
         },
-        created_by_admin: {
-          select: { id: true, username: true, full_name: true },
+        admins_installment_plans_created_by_admin_idToadmins: {
+          select: { id: true, name: true, email: true },
         },
-        cancelled_by_admin: {
-          select: { id: true, username: true, full_name: true },
+        admins_installment_plans_cancelled_by_admin_idToadmins: {
+          select: { id: true, name: true, email: true },
         },
       },
       orderBy: { created_at: 'desc' },
@@ -138,11 +139,16 @@ async function listInstallmentPlans(req, res) {
     const todayStr = getColomboCurrentDateString();
 
     const formattedPlans = plans.map((plan) => {
-      const debtPayments = plan.debt ? plan.debt.debt_payments : [];
+      const fisherObj = plan.fishers;
+      const debtObj = plan.fisher_debts;
+      const createdByAdminObj = plan.admins_installment_plans_created_by_admin_idToadmins;
+      const cancelledByAdminObj = plan.admins_installment_plans_cancelled_by_admin_idToadmins;
+
+      const debtPayments = debtObj ? debtObj.debt_payments : [];
       const validPaid = debtPayments
         .filter((p) => p.reversed_at == null)
         .reduce((sum, p) => sum + Number(p.amount), 0);
-      const debtOriginalAmt = Number(plan.debt ? plan.debt.original_amount : 0);
+      const debtOriginalAmt = Number(debtObj ? debtObj.original_amount : 0);
       const debtCurrentBalance = Math.max(0, Number((debtOriginalAmt - validPaid).toFixed(2)));
 
       const coverage = calculatePlanCoverageAndStatus(plan, debtPayments, debtCurrentBalance, todayStr);
@@ -153,12 +159,12 @@ async function listInstallmentPlans(req, res) {
 
       return {
         id: plan.id.toString(),
-        fisherId: plan.fisher.id.toString(),
-        fisherCode: plan.fisher.fisher_id,
-        fisherName: plan.fisher.full_name,
-        nicNumber: plan.fisher.nic,
+        fisherId: fisherObj ? fisherObj.id.toString() : '',
+        fisherCode: fisherObj ? fisherObj.fisher_id : '',
+        fisherName: fisherObj ? fisherObj.full_name : '',
+        nicNumber: fisherObj ? fisherObj.nic : '',
         debtId: plan.debt_id.toString(),
-        debtDescription: plan.debt ? plan.debt.description : null,
+        debtDescription: debtObj ? debtObj.description : null,
         startingBalance: Number(plan.starting_balance),
         startingPaymentId: plan.starting_payment_id.toString(),
         monthlyInstallmentAmount: Number(plan.monthly_amount),
@@ -170,8 +176,8 @@ async function listInstallmentPlans(req, res) {
         cancelledAt: plan.cancelled_at,
         cancellationReason: plan.cancellation_reason,
         notes: plan.notes,
-        createdByAdmin: plan.created_by_admin ? plan.created_by_admin.full_name || plan.created_by_admin.username : null,
-        cancelledByAdmin: plan.cancelled_by_admin ? plan.cancelled_by_admin.full_name || plan.cancelled_by_admin.username : null,
+        createdByAdmin: createdByAdminObj ? createdByAdminObj.name || createdByAdminObj.email : null,
+        cancelledByAdmin: cancelledByAdminObj ? cancelledByAdminObj.name || cancelledByAdminObj.email : null,
         coverage: {
           isManualReviewRequired: coverage.isManualReviewRequired,
           manualReviewReason: coverage.manualReviewReason,
