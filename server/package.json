@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.750.0",
-    "@napi-rs/canvas-win32-x64-msvc": "^1.0.8",
+    "@napi-rs/canvas": "^1.0.8",
     "@prisma/client": "^6.4.0",
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.7",
