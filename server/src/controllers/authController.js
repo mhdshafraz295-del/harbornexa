@@ -1,4 +1,9 @@
-const bcrypt = require('bcrypt');
+let bcrypt;
+try {
+  bcrypt = require('bcrypt');
+} catch (e) {
+  bcrypt = require('bcryptjs');
+}
 const prisma = require('../config/prismaClient');
 const env = require('../config/env');
 const { generateToken } = require('../utils/jwt');

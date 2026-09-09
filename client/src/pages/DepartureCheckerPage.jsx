@@ -13,6 +13,8 @@ import {
   Cpu,
 } from 'lucide-react';
 import { checkDeparturePdfs } from '../services/departureCheckerService';
+import { getAttachmentAsFile } from '../services/emailService';
+import { EmailInboxDrawer } from '../components/departure/EmailInboxDrawer';
 
 export const DepartureCheckerPage = () => {
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -20,6 +22,7 @@ export const DepartureCheckerPage = () => {
   const [processingStep, setProcessingStep] = useState('');
   const [batchResult, setBatchResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isDragOverDropzone, setIsDragOverDropzone] = useState(false);
 
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files || []);
@@ -59,10 +62,10 @@ export const DepartureCheckerPage = () => {
     setProcessingStep('');
   };
 
-  const handleUploadAndCheck = async () => {
-    if (selectedFiles.length === 0) return;
+  const handleProcessFiles = async (filesToCheck) => {
+    if (!filesToCheck || filesToCheck.length === 0) return;
 
-    if (selectedFiles.length > 5) {
+    if (filesToCheck.length > 5) {
       setErrorMessage('Maximum 5 PDF files per batch allowed.');
       return;
     }
@@ -70,12 +73,12 @@ export const DepartureCheckerPage = () => {
     try {
       setIsProcessing(true);
       setErrorMessage('');
-      
+
       setProcessingStep('Reading PDFs & Extracting NICs...');
       await new Promise((r) => setTimeout(r, 200));
 
       setProcessingStep('Checking Live BLC Status in Database...');
-      const data = await checkDeparturePdfs(selectedFiles);
+      const data = await checkDeparturePdfs(filesToCheck);
 
       setProcessingStep('Completed');
       setBatchResult(data);
@@ -85,6 +88,88 @@ export const DepartureCheckerPage = () => {
     } finally {
       setIsProcessing(false);
       setProcessingStep('');
+    }
+  };
+
+  const handleUploadAndCheck = () => {
+    handleProcessFiles(selectedFiles);
+  };
+
+  // Add multiple files from email drawer to batch
+  const handleAddFilesToBatch = (newFiles) => {
+    setSelectedFiles((prev) => {
+      const combined = [...prev, ...newFiles];
+      if (combined.length > 5) {
+        setErrorMessage('Maximum 5 PDF files are allowed per batch.');
+        return combined.slice(0, 5);
+      }
+      return combined;
+    });
+  };
+
+  // Direct 1-Click verify from Email attachment
+  const handleDirectCheckAttachment = async (attachment) => {
+    try {
+      setErrorMessage('');
+      setProcessingStep('Loading PDF from email...');
+      const file = await getAttachmentAsFile(attachment);
+      setSelectedFiles([file]);
+      await handleProcessFiles([file]);
+    } catch (err) {
+      console.error('Direct check attachment error:', err);
+      setErrorMessage(`Failed to check attachment: ${err.message || 'Error loading file'}`);
+    }
+  };
+
+  // Dropzone drag-and-drop handler (supports both OS files and Email attachment drops)
+  const handleDropOnZone = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverDropzone(false);
+    setErrorMessage('');
+
+    // Check if dropped from email drawer
+    const emailDataRaw = e.dataTransfer.getData('application/json');
+    if (emailDataRaw) {
+      try {
+        const payload = JSON.parse(emailDataRaw);
+        if (payload.type === 'harbornexa-email-attachment' && payload.attachment) {
+          setProcessingStep('Fetching attachment from email...');
+          const file = await getAttachmentAsFile(payload.attachment);
+          
+          if (selectedFiles.length >= 5) {
+            setErrorMessage('Maximum 5 PDF files are allowed per batch.');
+            return;
+          }
+
+          setSelectedFiles((prev) => [...prev, file]);
+          return;
+        }
+      } catch (parseErr) {
+        console.warn('Drop JSON parse error:', parseErr);
+      }
+    }
+
+    // Standard OS drag-and-drop files
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length === 0) return;
+
+    const validPdfFiles = files.filter(
+      (f) => f && (f.type === 'application/pdf' || (f.name && f.name.toLowerCase().endsWith('.pdf')))
+    );
+
+    if (validPdfFiles.length < files.length) {
+      setErrorMessage('Some non-PDF files were excluded. Only PDF files are supported.');
+    }
+
+    if (selectedFiles.length + validPdfFiles.length > 5) {
+      setErrorMessage('Maximum 5 PDF files are allowed per batch.');
+      const allowedCount = 5 - selectedFiles.length;
+      if (allowedCount > 0) {
+        setSelectedFiles((prev) => [...prev, ...validPdfFiles.slice(0, allowedCount)]);
+      }
+    } else {
+      setSelectedFiles((prev) => [...prev, ...validPdfFiles]);
     }
   };
 
@@ -125,6 +210,13 @@ export const DepartureCheckerPage = () => {
         </div>
       )}
 
+      {/* Email Manifests Inbox Widget */}
+      <EmailInboxDrawer
+        onDirectCheckAttachment={handleDirectCheckAttachment}
+        onAddFilesToBatch={handleAddFilesToBatch}
+        isProcessingParent={isProcessing}
+      />
+
       {/* Main Upload Box */}
       <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] shadow-2xs space-y-5">
         <div className="flex items-center justify-between">
@@ -144,17 +236,36 @@ export const DepartureCheckerPage = () => {
           )}
         </div>
 
-        {/* Dropzone */}
+        {/* Dropzone with OS & Email Drag & Drop */}
         {selectedFiles.length < 5 && (
-          <label className="border-2 border-dashed border-[#E5E7EB] hover:border-[#F5B942] bg-[#F5F6F8]/50 hover:bg-[#FFFDF3] rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all duration-200 text-center">
-            <div className="w-12 h-12 rounded-full bg-[#FFF7D6] border border-[#FFD978] flex items-center justify-center text-[#111827] mb-3">
+          <label
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragOverDropzone(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setIsDragOverDropzone(false);
+            }}
+            onDrop={handleDropOnZone}
+            className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all duration-200 text-center ${
+              isDragOverDropzone
+                ? 'border-[#F5B942] bg-[#FFF8DB] ring-4 ring-[#FFD978]/60 scale-[1.01]'
+                : 'border-[#E5E7EB] hover:border-[#F5B942] bg-[#F5F6F8]/50 hover:bg-[#FFFDF3]'
+            }`}
+          >
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-[#111827] mb-3 transition-transform ${
+              isDragOverDropzone ? 'scale-110 bg-[#FFD978] border border-[#F5B942]' : 'bg-[#FFF7D6] border border-[#FFD978]'
+            }`}>
               <FileText className="w-6 h-6 text-[#111827]" />
             </div>
             <p className="text-sm font-bold text-[#111827]">
-              Click to select or drag & drop Departure PDFs
+              {isDragOverDropzone
+                ? '📥 Release to add PDF Manifest!'
+                : 'Click to select or drag & drop Departure PDFs'}
             </p>
             <p className="text-xs text-[#64748B] mt-1 font-medium">
-              Only PDF files accepted. Maximum 5 PDF files per batch.
+              Drop PDFs from your computer or drag attachment pills from the email inbox above.
             </p>
             <input
               type="file"

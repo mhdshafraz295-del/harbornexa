@@ -14,6 +14,7 @@ const qrRoutes = require('./routes/qrRoutes');
 const exportRoutes = require('./routes/exportRoutes');
 const departureCheckerRoutes = require('./routes/departureCheckerRoutes');
 const installmentRoutes = require('./routes/installmentRoutes');
+const emailRoutes = require('./routes/emailRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -64,6 +65,7 @@ app.use('/api/export', exportRoutes);
 app.use('/api/departure-checker', departureCheckerRoutes);
 app.use('/api/departure-pdf-checker', departureCheckerRoutes);
 app.use('/api/installments', installmentRoutes);
+app.use('/api/email', emailRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

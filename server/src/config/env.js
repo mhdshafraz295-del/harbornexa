@@ -34,4 +34,11 @@ module.exports = {
     bucketName: process.env.R2_BUCKET_NAME || 'valachchenai-harbor-docs',
     endpoint: process.env.R2_ENDPOINT || '',
   },
+  email: {
+    host: process.env.EMAIL_HOST || 'imap.gmail.com',
+    port: parseInt(process.env.EMAIL_PORT || '993', 10),
+    user: process.env.EMAIL_USER || '',
+    pass: process.env.EMAIL_PASS || '',
+    secure: process.env.EMAIL_SECURE !== 'false', // true by default (TLS port 993)
+  },
 };
