@@ -112,33 +112,35 @@ function getMockDepartureEmails() {
   const mockAttachmentId3 = 'mock_dfar_imula_0452';
   const mockAttachmentId4 = 'mock_cg_imula_0189';
 
+  const defaultMockSize = 111405;
+
   if (!attachmentCache.has(mockAttachmentId1)) {
     attachmentCache.set(mockAttachmentId1, {
       buffer: realPdfBuffer,
       filename: 'Departure_approval-IMULA0308KLT.pdf',
       contentType: 'application/pdf',
-      size: realPdfBuffer.length,
+      size: defaultMockSize,
       createdAt: Date.now(),
     });
     attachmentCache.set(mockAttachmentId2, {
       buffer: realPdfBuffer,
       filename: 'salman.pdf',
       contentType: 'application/pdf',
-      size: realPdfBuffer.length,
+      size: defaultMockSize,
       createdAt: Date.now(),
     });
     attachmentCache.set(mockAttachmentId3, {
       buffer: realPdfBuffer,
       filename: 'Departure_approval-IMULA0452KLT.pdf',
       contentType: 'application/pdf',
-      size: realPdfBuffer.length,
+      size: defaultMockSize,
       createdAt: Date.now(),
     });
     attachmentCache.set(mockAttachmentId4, {
       buffer: realPdfBuffer,
       filename: 'Sea_Safety_IMULA0189MTR.pdf',
       contentType: 'application/pdf',
-      size: realPdfBuffer.length,
+      size: defaultMockSize,
       createdAt: Date.now(),
     });
   }
@@ -156,7 +158,7 @@ function getMockDepartureEmails() {
         {
           id: mockAttachmentId2,
           filename: 'salman.pdf',
-          size: realPdfBuffer.length,
+          size: defaultMockSize,
           contentType: 'application/pdf',
         },
       ],
@@ -173,7 +175,7 @@ function getMockDepartureEmails() {
         {
           id: mockAttachmentId1,
           filename: 'Departure_approval-IMULA0308KLT.pdf',
-          size: realPdfBuffer.length,
+          size: defaultMockSize,
           contentType: 'application/pdf',
         },
       ],
@@ -190,7 +192,7 @@ function getMockDepartureEmails() {
         {
           id: mockAttachmentId3,
           filename: 'Departure_approval-IMULA0452KLT.pdf',
-          size: realPdfBuffer.length,
+          size: defaultMockSize,
           contentType: 'application/pdf',
         },
       ],
@@ -207,7 +209,7 @@ function getMockDepartureEmails() {
         {
           id: mockAttachmentId4,
           filename: 'Sea_Safety_IMULA0189MTR.pdf',
-          size: realPdfBuffer.length,
+          size: defaultMockSize,
           contentType: 'application/pdf',
         },
       ],

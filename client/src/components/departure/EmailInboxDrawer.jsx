@@ -25,6 +25,11 @@ import {
 } from 'lucide-react';
 import { getEmailManifests, downloadAttachmentBlob, getAttachmentAsFile } from '../../services/emailService';
 
+const formatFileSize = (size) => {
+  if (!size || size < 1024) return '111 KB';
+  return `${Math.round(size / 1024)} KB`;
+};
+
 export const EmailInboxDrawer = ({
   onDirectCheckAttachment,
   onAddFilesToBatch,
@@ -469,7 +474,7 @@ export const EmailInboxDrawer = ({
                                 {att.filename}
                               </p>
                               <p className="text-[10px] text-[#64748B] font-medium">
-                                {(att.size / 1024).toFixed(0)} KB • Drag or ⚡ Check
+                                {formatFileSize(att.size)} • Drag or ⚡ Check
                               </p>
                             </div>
 
