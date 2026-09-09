@@ -2,6 +2,34 @@ import api from './api';
 
 export const FALLBACK_EMAILS = [
   {
+    id: 'email_designing_mr_000',
+    subject: 'pass hbr',
+    from: 'mrdesigning7@gmail.com',
+    fromName: 'Designing Mr',
+    date: new Date().toISOString(),
+    preview: 'Departure approval manifest attached for departure clearance verification.',
+    hasPdf: true,
+    attachments: [
+      {
+        id: 'att_imula_0308_designing',
+        filename: 'Departure_approval-IMULA0308KLT.pdf',
+        size: 111405,
+        contentType: 'application/pdf',
+        url: '/Departure_approval-IMULA0308KLT.pdf',
+      },
+    ],
+  },
+  {
+    id: 'email_google_2fa',
+    subject: '2-Step Verification turned on',
+    from: 'no-reply@accounts.google.com',
+    fromName: 'Google',
+    date: new Date().toISOString(),
+    preview: '2-Step Verification turned on sfn1825@gmail.com Your Google Account is now protected.',
+    hasPdf: false,
+    attachments: [],
+  },
+  {
     id: 'email_shafraz_001',
     subject: '(no subject) - salman.pdf',
     from: 'mhdshafraz295@gmail.com',
