@@ -25,7 +25,7 @@ export default defineConfig({
     ],
     proxy: {
       '/api': {
-        target: 'https://gregarious-transformation-production.up.railway.app',
+        target: 'https://harbornexa-production.up.railway.app',
         changeOrigin: true,
         secure: true,
       },
