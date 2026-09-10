@@ -22,6 +22,7 @@ import {
   User,
   Paperclip,
   Check,
+  Printer,
 } from 'lucide-react';
 import { getEmailManifests, downloadAttachmentBlob, getAttachmentAsFile } from '../../services/emailService';
 
@@ -42,6 +43,7 @@ export const EmailInboxDrawer = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isExpanded, setIsExpanded] = useState(true);
   const [downloadingId, setDownloadingId] = useState(null);
+  const [printingId, setPrintingId] = useState(null);
   const [loadingAttachmentId, setLoadingAttachmentId] = useState(null);
   const [activeTab, setActiveTab] = useState('manifests'); // 'manifests' | 'all'
   const [expandedEmailId, setExpandedEmailId] = useState(null);
@@ -106,6 +108,91 @@ export const EmailInboxDrawer = ({
       alert('Failed to download PDF attachment.');
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  const handlePrint = async (attachment, e) => {
+    if (e) e.stopPropagation();
+
+    // Immediately open popup window to avoid browser popup blockers
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Loading ${attachment.filename || 'Manifest PDF'}...</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #F8FAFC; color: #1E293B; }
+              .spinner { width: 44px; height: 44px; border: 4px solid #E2E8F0; border-top: 4px solid #F5B942; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
+              @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+              h2 { font-size: 16px; font-weight: 800; margin: 0 0 6px 0; }
+              p { font-size: 13px; color: #64748B; margin: 0; }
+            </style>
+          </head>
+          <body>
+            <div class="spinner"></div>
+            <h2>Preparing Departure PDF for Printing...</h2>
+            <p>${attachment.filename || 'Please wait a moment while the document loads.'}</p>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+
+    try {
+      setPrintingId(attachment.id);
+      let blob;
+      if (attachment.url) {
+        try {
+          const res = await fetch(attachment.url);
+          if (res.ok) {
+            blob = await res.blob();
+          } else {
+            blob = await downloadAttachmentBlob(attachment.id);
+          }
+        } catch {
+          blob = await downloadAttachmentBlob(attachment.id);
+        }
+      } else {
+        blob = await downloadAttachmentBlob(attachment.id);
+      }
+
+      const pdfBlob = blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
+      const blobUrl = window.URL.createObjectURL(pdfBlob);
+
+      if (printWindow) {
+        printWindow.location.href = blobUrl;
+      } else {
+        // Fallback for iframe if window.open was blocked
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        iframe.src = blobUrl;
+        document.body.appendChild(iframe);
+        iframe.onload = () => {
+          try {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          } catch (printErr) {
+            console.warn('Iframe print error:', printErr);
+          }
+        };
+      }
+
+      setTimeout(() => {
+        window.URL.revokeObjectURL(blobUrl);
+      }, 120000);
+    } catch (err) {
+      console.error('Print PDF error:', err);
+      if (printWindow) printWindow.close();
+      alert('Failed to load PDF for printing.');
+    } finally {
+      setPrintingId(null);
     }
   };
 
@@ -451,6 +538,30 @@ export const EmailInboxDrawer = ({
                       <p className="text-xs text-slate-800 bg-white p-2.5 rounded-lg border border-slate-200 leading-relaxed font-normal">
                         {email.preview}
                       </p>
+                      {hasAttachments && (
+                        <div className="pt-1.5 flex items-center justify-between flex-wrap gap-2 border-t border-slate-200">
+                          <span className="text-[11px] font-bold text-[#111827]">Attached Departure Manifests:</span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {email.attachments.map((att) => (
+                              <button
+                                key={att.id}
+                                type="button"
+                                onClick={(e) => handlePrint(att, e)}
+                                disabled={printingId === att.id}
+                                title="Print this Departure PDF"
+                                className="px-2.5 py-1 rounded-lg bg-white border border-[#FFD978] hover:bg-[#FFF7D6] text-[#B45309] font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors disabled:opacity-50"
+                              >
+                                {printingId === att.id ? (
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#B45309]" />
+                                ) : (
+                                  <Printer className="w-3.5 h-3.5 text-[#B45309]" />
+                                )}
+                                <span>Print {att.filename}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -494,6 +605,22 @@ export const EmailInboxDrawer = ({
                                   <Zap className="w-3 h-3 text-[#111827] fill-[#111827]" />
                                 )}
                                 <span>Check</span>
+                              </button>
+
+                              {/* Print PDF Manifest */}
+                              <button
+                                type="button"
+                                onClick={(e) => handlePrint(att, e)}
+                                disabled={printingId === att.id}
+                                title="Print this Departure PDF"
+                                className="px-2 py-1 rounded-lg bg-white hover:bg-[#FFF7D6] border border-[#E2E8F0] hover:border-[#FFD978] text-[#111827] text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
+                              >
+                                {printingId === att.id ? (
+                                  <RefreshCw className="w-3 h-3 animate-spin text-[#B45309]" />
+                                ) : (
+                                  <Printer className="w-3 h-3 text-[#B45309]" />
+                                )}
+                                <span>Print</span>
                               </button>
 
                               {/* Download PDF */}

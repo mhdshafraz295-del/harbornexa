@@ -11,6 +11,7 @@ import {
   RefreshCw,
   ShieldAlert,
   Cpu,
+  Printer,
 } from 'lucide-react';
 import { checkDeparturePdfs } from '../services/departureCheckerService';
 import { getAttachmentAsFile } from '../services/emailService';
@@ -171,6 +172,220 @@ export const DepartureCheckerPage = () => {
     } else {
       setSelectedFiles((prev) => [...prev, ...validPdfFiles]);
     }
+  };
+
+  const handlePrintClearanceReport = (fileRes) => {
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+      alert('Please allow popups to print the clearance report.');
+      return;
+    }
+
+    const now = new Date().toLocaleString();
+    const hasBlc = fileRes.results?.some((r) => r.status === 'BLC' || r.outcome === 'BLC');
+    const approvedCount = fileRes.results?.filter((r) => r.status === 'APPROVED' || r.outcome === 'APPROVED').length || 0;
+    const blcCount = fileRes.results?.filter((r) => r.status === 'BLC' || r.outcome === 'BLC').length || 0;
+    const notFoundCount = fileRes.results?.filter((r) => r.status === 'NOT_FOUND' || r.outcome === 'NOT_FOUND').length || 0;
+
+    const tableRows = (fileRes.results || []).map((r) => {
+      const isApproved = r.status === 'APPROVED' || r.outcome === 'APPROVED';
+      const isBlc = r.status === 'BLC' || r.outcome === 'BLC';
+      const badgeColor = isApproved ? '#059669' : isBlc ? '#DC2626' : '#D97706';
+      const badgeText = isApproved ? 'APPROVED / NOT BLC' : isBlc ? 'BLC / BLOCKED' : 'NOT FOUND';
+
+      return `
+        <tr style="border-bottom: 1px solid #E2E8F0;">
+          <td style="padding: 8px 10px; font-family: monospace; font-weight: 700;">${r.nic || '—'}</td>
+          <td style="padding: 8px 10px;">${r.fisherId || '—'}</td>
+          <td style="padding: 8px 10px; font-weight: 700;">${r.fisherName || '—'}</td>
+          <td style="padding: 8px 10px;">${r.boatNo || '—'}</td>
+          <td style="padding: 8px 10px;"><span style="color: ${badgeColor}; font-weight: 800; font-size: 11px;">${badgeText}</span></td>
+          <td style="padding: 8px 10px; font-size: 11px;">${r.details || '—'}</td>
+        </tr>
+      `;
+    }).join('');
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Departure Clearance Report - ${fileRes.filename}</title>
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; padding: 28px; color: #0F172A; }
+            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0F172A; padding-bottom: 12px; margin-bottom: 16px; }
+            .title { font-size: 18px; font-weight: 800; text-transform: uppercase; }
+            .subtitle { font-size: 12px; color: #64748B; margin-top: 3px; }
+            .meta { font-size: 11px; text-align: right; }
+            .badge-banner { padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-weight: 800; font-size: 12px; background: ${hasBlc ? '#FEE2E2; color: #991B1B; border: 1px solid #F87171;' : '#D1FAE5; color: #065F46; border: 1px solid #34D399;'}; }
+            .stats { display: flex; gap: 16px; margin-bottom: 16px; font-size: 11px; }
+            .stat-item { background: #F8FAFC; border: 1px solid #E2E8F0; padding: 6px 12px; border-radius: 6px; }
+            .stat-label { color: #64748B; font-weight: 600; font-size: 10px; }
+            .stat-val { font-size: 15px; font-weight: 800; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 8px; }
+            th { text-align: left; padding: 8px 10px; background: #F1F5F9; border-bottom: 2px solid #CBD5E1; font-weight: 700; color: #475569; }
+            .footer { margin-top: 36px; display: flex; justify-content: space-between; font-size: 11px; color: #64748B; border-top: 1px solid #E2E8F0; padding-top: 16px; }
+            .sign-box { border-top: 1px dashed #94A3B8; width: 180px; text-align: center; padding-top: 6px; margin-top: 32px; }
+            @media print {
+              body { padding: 0; }
+              @page { margin: 1.5cm; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="title">Valachchenai Fisheries Harbor</div>
+              <div class="subtitle">DFAR Departure Clearance & Fisher BLC Verification Report</div>
+            </div>
+            <div class="meta">
+              <div><strong>Date:</strong> ${now}</div>
+              <div><strong>Manifest:</strong> ${fileRes.filename}</div>
+            </div>
+          </div>
+
+          <div class="badge-banner">
+            ${hasBlc ? '⚠ ATTENTION: CONTAINS BLC / BLOCKED FISHER - DEPARTURE HOLD ACTIVE' : '✓ ALL CREW VERIFIED - DEPARTURE CLEARANCE GRANTED'}
+          </div>
+
+          <div class="stats">
+            <div class="stat-item"><div class="stat-label">Total Crew Checked</div><div class="stat-val">${fileRes.results?.length || 0}</div></div>
+            <div class="stat-item"><div class="stat-label">Approved</div><div class="stat-val" style="color: #059669;">${approvedCount}</div></div>
+            <div class="stat-item"><div class="stat-label">BLC / Blocked</div><div class="stat-val" style="color: #DC2626;">${blcCount}</div></div>
+            <div class="stat-item"><div class="stat-label">Unregistered</div><div class="stat-val" style="color: #D97706;">${notFoundCount}</div></div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>NIC Number</th>
+                <th>Fisher ID</th>
+                <th>Fisher Name</th>
+                <th>Boat No</th>
+                <th>Clearance Status</th>
+                <th>Verification Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            <div>Verified with Harbornexa Clearance Management System</div>
+            <div class="sign-box">Harbor Master / Officer Signature</div>
+          </div>
+        </body>
+      </html>
+    `);
+    printWin.document.close();
+    setTimeout(() => {
+      printWin.focus();
+      printWin.print();
+    }, 400);
+  };
+
+  const handlePrintAllSummary = () => {
+    if (!batchResult || !batchResult.files) return;
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+      alert('Please allow popups to print the summary.');
+      return;
+    }
+
+    const now = new Date().toLocaleString();
+    const summary = batchResult.summary || {};
+
+    const fileSections = batchResult.files.map((file, idx) => {
+      const rows = (file.results || []).map((r) => {
+        const isApproved = r.status === 'APPROVED' || r.outcome === 'APPROVED';
+        const isBlc = r.status === 'BLC' || r.outcome === 'BLC';
+        const badgeColor = isApproved ? '#059669' : isBlc ? '#DC2626' : '#D97706';
+        const badgeText = isApproved ? 'APPROVED' : isBlc ? 'BLC HOLD' : 'NOT FOUND';
+        return `
+          <tr style="border-bottom: 1px solid #E2E8F0;">
+            <td style="padding: 6px 8px; font-family: monospace;">${r.nic || '—'}</td>
+            <td style="padding: 6px 8px;">${r.fisherName || '—'}</td>
+            <td style="padding: 6px 8px;">${r.boatNo || '—'}</td>
+            <td style="padding: 6px 8px;"><span style="color: ${badgeColor}; font-weight: 800;">${badgeText}</span></td>
+            <td style="padding: 6px 8px; font-size: 10px;">${r.details || '—'}</td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <div style="margin-top: 18px; border: 1px solid #CBD5E1; border-radius: 8px; overflow: hidden;">
+          <div style="background: #F1F5F9; padding: 8px 12px; font-weight: 800; font-size: 12px; display: flex; justify-content: space-between;">
+            <span>Manifest ${idx + 1}: ${file.filename}</span>
+            <span>Crew Count: ${file.results?.length || 0}</span>
+          </div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+            <thead>
+              <tr style="background: #FAFAFA; border-bottom: 1px solid #CBD5E1; text-align: left;">
+                <th style="padding: 6px 8px;">NIC</th>
+                <th style="padding: 6px 8px;">Fisher Name</th>
+                <th style="padding: 6px 8px;">Boat No</th>
+                <th style="padding: 6px 8px;">Status</th>
+                <th style="padding: 6px 8px;">Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }).join('');
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Departure Batch Verification Summary</title>
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; padding: 28px; color: #0F172A; }
+            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0F172A; padding-bottom: 12px; margin-bottom: 16px; }
+            .title { font-size: 18px; font-weight: 800; text-transform: uppercase; }
+            .subtitle { font-size: 12px; color: #64748B; margin-top: 3px; }
+            .stats { display: flex; gap: 14px; margin-bottom: 16px; font-size: 11px; }
+            .stat-item { background: #F8FAFC; border: 1px solid #E2E8F0; padding: 6px 12px; border-radius: 6px; }
+            .stat-val { font-size: 15px; font-weight: 800; }
+            @media print { body { padding: 0; } @page { margin: 1.5cm; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="title">Valachchenai Fisheries Harbor</div>
+              <div class="subtitle">Complete Batch Departure Clearance & BLC Verification Summary</div>
+            </div>
+            <div style="font-size: 11px; text-align: right;">
+              <div><strong>Date:</strong> ${now}</div>
+              <div><strong>Total Manifests:</strong> ${batchResult.files?.length || 0}</div>
+            </div>
+          </div>
+
+          <div class="stats">
+            <div class="stat-item"><div>Manifests Checked</div><div class="stat-val">${summary.pdfCount || summary.totalFiles || batchResult.files?.length}</div></div>
+            <div class="stat-item"><div>NICs Verified</div><div class="stat-val">${summary.nicCount || 0}</div></div>
+            <div class="stat-item"><div>Approved</div><div class="stat-val" style="color: #059669;">${summary.approved || summary.totalApproved || 0}</div></div>
+            <div class="stat-item"><div>BLC / Blocked</div><div class="stat-val" style="color: #DC2626;">${summary.blocked || summary.totalBlc || 0}</div></div>
+            <div class="stat-item"><div>Unregistered</div><div class="stat-val" style="color: #D97706;">${summary.notFound || summary.totalNotFound || 0}</div></div>
+          </div>
+
+          ${fileSections}
+
+          <div style="margin-top: 32px; display: flex; justify-content: space-between; font-size: 11px; color: #64748B; border-top: 1px solid #E2E8F0; padding-top: 16px;">
+            <div>Official Report generated by Harbornexa Fisher Clearance System</div>
+            <div style="border-top: 1px dashed #94A3B8; width: 180px; text-align: center; padding-top: 6px; margin-top: 24px;">Harbor Master Signature</div>
+          </div>
+        </body>
+      </html>
+    `);
+    printWin.document.close();
+    setTimeout(() => {
+      printWin.focus();
+      printWin.print();
+    }, 400);
   };
 
   return (
@@ -387,10 +602,21 @@ export const DepartureCheckerPage = () => {
 
           {/* Detailed Per-PDF Results */}
           <div className="space-y-4">
-            <h3 className="text-sm font-extrabold text-[#111827] flex items-center gap-2">
-              <FileCheck className="w-4 h-4 text-[#F5B942]" />
-              <span>PDF Results Breakdown</span>
-            </h3>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="text-sm font-extrabold text-[#111827] flex items-center gap-2">
+                <FileCheck className="w-4 h-4 text-[#F5B942]" />
+                <span>PDF Results Breakdown</span>
+              </h3>
+              <button
+                type="button"
+                onClick={handlePrintAllSummary}
+                className="px-3 py-1.5 rounded-xl bg-white border border-[#E5E7EB] hover:bg-[#FFF7D6] hover:border-[#FFD978] text-[#111827] text-xs font-extrabold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                title="Print full batch clearance verification report"
+              >
+                <Printer className="w-3.5 h-3.5 text-[#B45309]" />
+                <span>Print All Summary</span>
+              </button>
+            </div>
 
             {batchResult.files?.map((fileRes, fIdx) => {
               const hasBlc = fileRes.results?.some((r) => r.status === 'BLC' || r.outcome === 'BLC');
@@ -424,8 +650,19 @@ export const DepartureCheckerPage = () => {
                       </div>
                     </div>
 
-                    <div className="text-xs font-bold text-[#64748B]">
-                      NICs Found: <span className="text-[#111827] font-extrabold">{fileRes.results?.length || 0}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handlePrintClearanceReport(fileRes)}
+                        className="px-3 py-1.5 rounded-xl bg-white border border-[#E5E7EB] hover:bg-[#FFF7D6] hover:border-[#FFD978] text-[#111827] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                        title="Print Departure Clearance & BLC Verification Slip"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-[#B45309]" />
+                        <span>Print Report</span>
+                      </button>
+                      <div className="text-xs font-bold text-[#64748B] bg-white px-2.5 py-1.5 rounded-xl border border-[#E5E7EB]">
+                        NICs Found: <span className="text-[#111827] font-extrabold">{fileRes.results?.length || 0}</span>
+                      </div>
                     </div>
                   </div>
 
