@@ -224,7 +224,7 @@ export const FisherDetailDrawer = ({
             <div className="p-4 rounded-2xl bg-red-50 border border-red-200 space-y-2 text-xs text-red-900">
               <div className="flex items-center gap-2 font-extrabold text-red-700">
                 <ShieldAlert className="w-4 h-4 shrink-0" />
-                <span>Fisher Restricted from Harbor Clearance</span>
+                <span>Clearance Restricted</span>
               </div>
               <ul className="list-disc pl-5 space-y-1 font-semibold text-[11px]">
                 {clearance.reasons.map((r, i) => (
@@ -238,7 +238,7 @@ export const FisherDetailDrawer = ({
           <div className="bg-[#F5F6F8] border border-[#E5E7EB] rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-extrabold text-[#64748B] uppercase tracking-wider">
-                Financial Ledger Summary
+                Financial Summary
               </h3>
               <span className="text-[10px] font-bold text-slate-500">Real-time DB</span>
             </div>
@@ -274,14 +274,14 @@ export const FisherDetailDrawer = ({
           {/* Identity & Contact Details Card */}
           <div className="bg-[#F5F6F8] border border-[#E5E7EB] rounded-2xl p-4 space-y-3">
             <h3 className="text-xs font-extrabold text-[#64748B] uppercase tracking-wider">
-              Identity & Contact Details
+              Fisher Details
             </h3>
 
             <div className="space-y-2.5 text-xs text-[#111827]">
               <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-[#E5E7EB]">
                 <div className="flex items-center gap-2 text-[#64748B]">
                   <CreditCard className="w-4 h-4 text-slate-400" />
-                  <span className="font-semibold">Sri Lankan NIC:</span>
+                  <span className="font-semibold">NIC:</span>
                 </div>
                 <span className="font-extrabold tracking-wider">{fisher.nic}</span>
               </div>
@@ -297,7 +297,7 @@ export const FisherDetailDrawer = ({
               <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-[#E5E7EB]">
                 <div className="flex items-center gap-2 text-[#64748B]">
                   <Ship className="w-4 h-4 text-slate-400" />
-                  <span className="font-semibold">Boat Number:</span>
+                  <span className="font-semibold">Boat No.:</span>
                 </div>
                 <span className="font-extrabold">{fisher.boat_no || 'Not assigned'}</span>
               </div>
@@ -306,7 +306,7 @@ export const FisherDetailDrawer = ({
                 <div className="p-2.5 rounded-xl bg-white border border-[#E5E7EB] space-y-1">
                   <div className="flex items-center gap-2 text-[#64748B]">
                     <MapPin className="w-4 h-4 text-slate-400" />
-                    <span className="font-semibold">Home Address:</span>
+                    <span className="font-semibold">Address:</span>
                   </div>
                   <p className="text-xs text-[#111827] font-medium pl-6">{fisher.address}</p>
                 </div>
@@ -341,7 +341,7 @@ export const FisherDetailDrawer = ({
             {fisher.is_archived ? (
               <div className="p-3 bg-white border border-slate-200 rounded-xl text-center">
                 <p className="text-xs font-semibold text-slate-500">
-                  QR unavailable for archived Fisher.
+                  QR unavailable for archived fisher.
                 </p>
               </div>
             ) : loadingQr ? (
@@ -375,7 +375,7 @@ export const FisherDetailDrawer = ({
               </div>
             ) : (
               <div className="p-3 bg-white border border-dashed border-[#E5E7EB] rounded-xl text-center space-y-2">
-                <p className="text-xs font-bold text-slate-600">No active QR issued for this Fisher.</p>
+                <p className="text-xs font-bold text-slate-600">No active QR card issued.</p>
                 <button
                   type="button"
                   onClick={handleGenerateQr}
@@ -393,14 +393,14 @@ export const FisherDetailDrawer = ({
           <div className="bg-[#F5F6F8] border border-[#E5E7EB] rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-extrabold text-[#64748B] uppercase tracking-wider">
-                Manual Holds & History
+                Manual Holds
               </h3>
             </div>
 
             {/* Active Holds */}
             <div className="space-y-2">
               <div className="text-[11px] font-bold text-slate-700 flex items-center justify-between">
-                <span>Active Manual Holds</span>
+                <span>Active Holds</span>
                 <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 text-[10px] font-extrabold">
                   {holdsList.filter((h) => !h.released_at).length} Active
                 </span>
@@ -434,7 +434,7 @@ export const FisherDetailDrawer = ({
               <div className="text-[11px] font-bold text-slate-700">Hold History</div>
               {holdsList.length === 0 ? (
                 <div className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-500 italic text-center">
-                  No hold history records.
+                  No hold history.
                 </div>
               ) : (
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
@@ -471,7 +471,7 @@ export const FisherDetailDrawer = ({
           <div className="bg-[#F5F6F8] border border-[#E5E7EB] rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-extrabold text-[#64748B] uppercase tracking-wider">
-                Debts & Payment History
+                Debts & Payments
               </h3>
             </div>
 
@@ -534,7 +534,7 @@ export const FisherDetailDrawer = ({
               </div>
             ) : (
               <div className="p-4 text-center text-xs text-slate-500 font-medium">
-                No debt records found for this fisher.
+                No debt records.
               </div>
             )}
           </div>
@@ -544,7 +544,7 @@ export const FisherDetailDrawer = ({
             <div className="flex items-center justify-between text-[#64748B]">
               <span className="flex items-center gap-1.5 font-medium">
                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                Created Date:
+                Created:
               </span>
               <span className="font-bold text-[#111827]">{formatDate(fisher.created_at)}</span>
             </div>
@@ -552,7 +552,7 @@ export const FisherDetailDrawer = ({
             <div className="flex items-center justify-between text-[#64748B]">
               <span className="flex items-center gap-1.5 font-medium">
                 <Clock className="w-3.5 h-3.5 text-slate-400" />
-                Last Updated:
+                Updated:
               </span>
               <span className="font-bold text-[#111827]">{formatDate(fisher.updated_at)}</span>
             </div>
@@ -606,7 +606,7 @@ export const FisherDetailDrawer = ({
               className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-[#111827] rounded-xl text-xs font-bold cursor-pointer"
             >
               <Edit className="w-4 h-4" />
-              <span>Edit Record</span>
+              <span>Edit</span>
             </button>
 
             {fisher.is_archived ? (
@@ -647,7 +647,7 @@ export const FisherDetailDrawer = ({
             </div>
 
             <p className="text-xs text-slate-600 font-medium leading-relaxed">
-              Reissuing this QR will deactivate the fisher's previous QR card. Continue?
+              Reissuing deactivates the current QR card. Continue?
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2">

@@ -9,7 +9,7 @@ export const PlaceholderPage = ({ title }) => {
           {title}
         </h1>
         <p className="text-xs sm:text-sm font-medium text-[#64748B] mt-1">
-          Valachchenai Harbor Fisher Clearance Management System
+          Valachchenai Harbor Clearance System
         </p>
       </div>
 
@@ -23,7 +23,7 @@ export const PlaceholderPage = ({ title }) => {
         </h2>
 
         <p className="text-sm text-[#64748B] max-w-md mx-auto leading-relaxed">
-          This module will be available in the next development phase.
+          Module coming soon.
         </p>
 
         <div className="mt-6 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#FFF7D6] border border-[#FFD978] text-xs text-[#111827] font-bold">

@@ -78,7 +78,7 @@ export const RecordPaymentModal = ({ isOpen, onClose, onSubmit, debt }) => {
           <div>
             <h2 className="text-lg font-extrabold text-[#111827]">Record Payment</h2>
             <p className="text-xs text-[#64748B] mt-0.5">
-              Settle or make a partial payment on fisher debt.
+              Enter payment details.
             </p>
           </div>
           <button
@@ -149,7 +149,7 @@ export const RecordPaymentModal = ({ isOpen, onClose, onSubmit, debt }) => {
               />
             </div>
             <p className="text-[10px] text-slate-500 mt-1">
-              Maximum payable: Rs. {debt.outstanding_amount}
+              Max payable: Rs. {debt.outstanding_amount}
             </p>
           </div>
 
@@ -159,7 +159,7 @@ export const RecordPaymentModal = ({ isOpen, onClose, onSubmit, debt }) => {
             {/* Payment Date */}
             <div>
               <label className="block text-xs font-bold text-[#111827] mb-1">
-                Payment Date <span className="text-red-500">*</span>
+                Date <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -201,13 +201,13 @@ export const RecordPaymentModal = ({ isOpen, onClose, onSubmit, debt }) => {
 
           {/* Reference No */}
           <div>
-            <label className="block text-xs font-bold text-[#111827] mb-1">Reference / Receipt No</label>
+            <label className="block text-xs font-bold text-[#111827] mb-1">Receipt No.</label>
             <input
               type="text"
               name="referenceNo"
               value={formData.referenceNo}
               onChange={handleChange}
-              placeholder="e.g. REC-2026-0091"
+              placeholder="e.g. REC-0091"
               className="w-full px-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FFD978]"
             />
           </div>
@@ -227,7 +227,7 @@ export const RecordPaymentModal = ({ isOpen, onClose, onSubmit, debt }) => {
 
           {/* Idempotency Protection Indicator */}
           <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-[10px] text-slate-500">
-            <span>Double-submit Protection:</span>
+            <span>Protection:</span>
             <span className="font-mono font-bold text-slate-700 tracking-tight line-clamp-1 max-w-[180px]">
               {formData.idempotencyKey}
             </span>

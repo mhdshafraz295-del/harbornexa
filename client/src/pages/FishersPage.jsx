@@ -217,7 +217,7 @@ export const FishersPage = () => {
   };
 
   const filterTabs = [
-    { id: 'ALL', label: 'All Fishers', count: counts.all, dotColor: 'bg-slate-400' },
+    { id: 'ALL', label: 'All', count: counts.all, dotColor: 'bg-slate-400' },
     { id: 'ACTIVE', label: 'Active', count: counts.active, dotColor: 'bg-emerald-500' },
     { id: 'BLOCKED', label: 'Blocked', count: counts.blocked, dotColor: 'bg-red-500' },
     { id: 'PENDING', label: 'Pending', count: counts.pending, dotColor: 'bg-amber-500' },
@@ -239,7 +239,7 @@ export const FishersPage = () => {
             </span>
           </div>
           <p className="text-xs sm:text-sm font-medium text-[#64748B]">
-            Manage and quickly identify Valachchenai Harbor fishers.
+            Manage harbor fisher records and clearance status.
           </p>
         </div>
 
@@ -292,7 +292,7 @@ export const FishersPage = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by Name, NIC, Phone, Fisher ID or Boat No..."
+              placeholder="Search by Name, NIC, Phone, Fisher ID, Boat No..."
               className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#D1D5DB] rounded-xl text-sm text-[#111827] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FFD978] focus:border-[#F5B942]"
             />
             {searchQuery && (
@@ -347,9 +347,9 @@ export const FishersPage = () => {
             </div>
             {debouncedSearch || activeTab !== 'ALL' ? (
               <>
-                <h3 className="text-sm font-extrabold text-[#111827]">No fishers match your search.</h3>
+                <h3 className="text-sm font-extrabold text-[#111827]">No fishers found.</h3>
                 <p className="text-xs text-[#64748B] mt-1">
-                  Try adjusting your search terms or status filter.
+                  Adjust search criteria or filters.
                 </p>
                 <button
                   onClick={() => {
@@ -363,9 +363,9 @@ export const FishersPage = () => {
               </>
             ) : (
               <>
-                <h3 className="text-sm font-extrabold text-[#111827]">No fishers registered yet.</h3>
+                <h3 className="text-sm font-extrabold text-[#111827]">No registered fishers.</h3>
                 <p className="text-xs text-[#64748B] mt-1 max-w-sm mx-auto">
-                  Click the "+ Add Fisher" button above to register your first harbor fisher.
+                  Use "+ Add Fisher" to register a fisher record.
                 </p>
                 <button
                   onClick={handleOpenAddModal}
@@ -386,7 +386,7 @@ export const FishersPage = () => {
                     <th className="py-3.5 px-4">Fisher</th>
                     <th className="py-3.5 px-4">NIC</th>
                     <th className="py-3.5 px-4">Phone</th>
-                    <th className="py-3.5 px-4">Boat No</th>
+                    <th className="py-3.5 px-4">Boat No.</th>
                     <th className="py-3.5 px-4">Status</th>
                     <th className="py-3.5 px-4">Updated</th>
                     <th className="py-3.5 px-4 text-right">Actions</th>

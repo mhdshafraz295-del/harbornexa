@@ -168,9 +168,9 @@ export const DebtPaymentsPage = () => {
   };
 
   const filterTabs = [
-    { id: 'ALL', label: 'All Records' },
-    { id: 'OUTSTANDING', label: 'மீதிக் கடன்' },
-    { id: 'FULLY_PAID', label: 'Fully Paid' },
+    { id: 'ALL', label: 'All' },
+    { id: 'OUTSTANDING', label: 'Outstanding' },
+    { id: 'FULLY_PAID', label: 'Paid' },
     { id: 'DEBT_HOLD', label: 'Debt Hold' },
     { id: 'CANCELLED', label: 'Cancelled' },
   ];
@@ -179,7 +179,7 @@ export const DebtPaymentsPage = () => {
     {
       title: 'Total Outstanding',
       value: `Rs. ${metrics.totalOutstanding}`,
-      helper: 'Unpaid harbor dues & charges',
+      helper: 'Unpaid dues',
       icon: Coins,
       color: 'text-red-700',
       accentBg: 'bg-red-50',
@@ -189,7 +189,7 @@ export const DebtPaymentsPage = () => {
     {
       title: 'Fishers With Debt',
       value: metrics.fishersWithDebt,
-      helper: 'Fishers on automatic debt hold',
+      helper: 'Fishers on hold',
       icon: ShieldAlert,
       color: 'text-[#111827]',
       accentBg: 'bg-[#FFF7D6]',
@@ -199,7 +199,7 @@ export const DebtPaymentsPage = () => {
     {
       title: 'Fully Paid',
       value: metrics.fullyPaidFishers,
-      helper: 'Fishers with zero balance',
+      helper: 'Zero balance',
       icon: CheckCircle2,
       color: 'text-emerald-700',
       accentBg: 'bg-emerald-50',
@@ -209,7 +209,7 @@ export const DebtPaymentsPage = () => {
     {
       title: 'Payments Today',
       value: `Rs. ${metrics.paymentsToday}`,
-      helper: 'Received today (Asia/Colombo)',
+      helper: 'Received today',
       icon: Calendar,
       color: 'text-[#111827]',
       accentBg: 'bg-[#FFF7D6]',
@@ -233,7 +233,7 @@ export const DebtPaymentsPage = () => {
             </span>
           </div>
           <p className="text-xs sm:text-sm font-medium text-[#64748B]">
-            Manage harbor debts, payments, and clearance holds.
+            Manage harbor debts and payment records.
           </p>
         </div>
 
@@ -322,7 +322,7 @@ export const DebtPaymentsPage = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search debt by Fisher Name, NIC, Fisher ID, Phone or Boat No..."
+              placeholder="Search by Fisher Name, NIC, Fisher ID, Boat No..."
               className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#D1D5DB] rounded-xl text-sm text-[#111827] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FFD978]"
             />
             {searchQuery && (
@@ -371,8 +371,8 @@ export const DebtPaymentsPage = () => {
             </div>
             {debouncedSearch || activeTab !== 'ALL' ? (
               <>
-                <h3 className="text-sm font-extrabold text-[#111827]">No debt records match your search.</h3>
-                <p className="text-xs text-[#64748B] mt-1">Try resetting your search query or status filter.</p>
+                <h3 className="text-sm font-extrabold text-[#111827]">No debt records found.</h3>
+                <p className="text-xs text-[#64748B] mt-1">Adjust search criteria or filters.</p>
                 <button
                   onClick={() => {
                     setSearchQuery('');
@@ -385,9 +385,9 @@ export const DebtPaymentsPage = () => {
               </>
             ) : (
               <>
-                <h3 className="text-sm font-extrabold text-[#111827]">No debt records created yet.</h3>
+                <h3 className="text-sm font-extrabold text-[#111827]">No debt records.</h3>
                 <p className="text-xs text-[#64748B] mt-1 max-w-sm mx-auto">
-                  Click the "+ Add Debt" button above to issue a new debt record.
+                  Use "+ Add Debt" to create a debt record.
                 </p>
                 <button
                   onClick={() => handleOpenAddDebt(null)}

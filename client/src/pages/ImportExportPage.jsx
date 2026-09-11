@@ -160,7 +160,7 @@ export const ImportExportPage = () => {
                 Import & Export Data Center
               </h1>
               <p className="text-xs text-[#64748B] mt-0.5">
-                Batch import harbor fishers or generate official PDF, Excel, and CSV production reports.
+                Export production reports or batch import fishers.
               </p>
             </div>
           </div>
@@ -176,7 +176,7 @@ export const ImportExportPage = () => {
               }`}
             >
               <Download className="w-4 h-4 text-[#F5B942]" />
-              <span>Export Production Reports</span>
+              <span>Export Reports</span>
             </button>
             <button
               onClick={() => setActiveTab('import')}
@@ -187,7 +187,7 @@ export const ImportExportPage = () => {
               }`}
             >
               <Upload className="w-4 h-4 text-[#F5B942]" />
-              <span>Batch Fisher Import</span>
+              <span>Fisher Import</span>
             </button>
           </div>
         </div>
@@ -222,13 +222,13 @@ export const ImportExportPage = () => {
                 </div>
                 <div>
                   <h3 className="text-sm font-extrabold text-[#111827]">Active Fishers Report</h3>
-                  <p className="text-[11px] text-[#64748B]">Fishers with CLEARED effective clearance status (eligible for harbor departure).</p>
+                  <p className="text-[11px] text-[#64748B]">Fishers with CLEARED status.</p>
                 </div>
               </div>
 
               {/* Filters */}
               <div className="mt-4">
-                <label className="text-[11px] font-bold text-[#475569] block mb-1">Search Keyword</label>
+                <label className="text-[11px] font-bold text-[#475569] block mb-1">Search</label>
                 <input
                   type="text"
                   value={activeSearch}
@@ -247,7 +247,7 @@ export const ImportExportPage = () => {
                 className="px-3.5 py-2 text-xs font-bold rounded-xl bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>{downloadingModule === 'active-fishers-pdf' ? 'Generating PDF...' : 'PDF Report'}</span>
+                <span>{downloadingModule === 'active-fishers-pdf' ? 'Generating PDF...' : 'PDF'}</span>
               </button>
               <button
                 disabled={downloadingModule === 'active-fishers-csv'}
@@ -269,13 +269,13 @@ export const ImportExportPage = () => {
                 </div>
                 <div>
                   <h3 className="text-sm font-extrabold text-[#111827]">Blocked Fishers (BCL) Report</h3>
-                  <p className="text-[11px] text-[#64748B]">Fishers with HOLD effective clearance status (blocked due to debt, manual hold, or base block).</p>
+                  <p className="text-[11px] text-[#64748B]">Fishers with BLC / HOLD status.</p>
                 </div>
               </div>
 
               {/* Filters */}
               <div className="mt-4">
-                <label className="text-[11px] font-bold text-[#475569] block mb-1">Search Keyword</label>
+                <label className="text-[11px] font-bold text-[#475569] block mb-1">Search</label>
                 <input
                   type="text"
                   value={blockedSearch}
@@ -294,7 +294,7 @@ export const ImportExportPage = () => {
                 className="px-3.5 py-2 text-xs font-bold rounded-xl bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>{downloadingModule === 'blocked-fishers-pdf' ? 'Generating PDF...' : 'PDF Report'}</span>
+                <span>{downloadingModule === 'blocked-fishers-pdf' ? 'Generating PDF...' : 'PDF'}</span>
               </button>
               <button
                 disabled={downloadingModule === 'blocked-fishers-csv'}
@@ -307,7 +307,7 @@ export const ImportExportPage = () => {
             </div>
           </div>
 
-          {/* Card 2: Debt Records */}
+          {/* Card 3: Debt Records */}
           <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 shadow-2xs flex flex-col justify-between space-y-4">
             <div>
               <div className="flex items-center gap-3 border-b border-[#E5E7EB] pb-3">
@@ -316,24 +316,24 @@ export const ImportExportPage = () => {
                 </div>
                 <div>
                   <h3 className="text-sm font-extrabold text-[#111827]">Debt Records Report</h3>
-                  <p className="text-[11px] text-[#64748B]">Outstanding harbor charges, payments, and balances.</p>
+                  <p className="text-[11px] text-[#64748B]">Outstanding charges (மீதிக் கடன்), payments, and balances.</p>
                 </div>
               </div>
 
               {/* Filters */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
                 <div>
-                  <label className="text-[11px] font-bold text-[#475569] block mb-1">Search Keyword</label>
+                  <label className="text-[11px] font-bold text-[#475569] block mb-1">Search</label>
                   <input
                     type="text"
                     value={debtSearch}
                     onChange={(e) => setDebtSearch(e.target.value)}
-                    placeholder="Debt Code, Fisher, Charge Type..."
+                    placeholder="Debt Code, Fisher, Charge..."
                     className="w-full text-xs px-3 py-2 rounded-xl border border-[#E5E7EB] focus:outline-none focus:border-[#F5B942]"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-[#475569] block mb-1">Payment Status</label>
+                  <label className="text-[11px] font-bold text-[#475569] block mb-1">Status</label>
                   <select
                     value={debtStatus}
                     onChange={(e) => setDebtStatus(e.target.value)}
@@ -356,7 +356,7 @@ export const ImportExportPage = () => {
                 className="px-3 py-2 text-xs font-bold rounded-xl bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>{downloadingModule === 'debts-pdf' ? 'Generating PDF...' : 'PDF Report'}</span>
+                <span>{downloadingModule === 'debts-pdf' ? 'Generating PDF...' : 'PDF'}</span>
               </button>
               <button
                 disabled={downloadingModule === 'debts-excel'}
@@ -386,7 +386,7 @@ export const ImportExportPage = () => {
                 </div>
                 <div>
                   <h3 className="text-sm font-extrabold text-[#111827]">Payment Collection Report</h3>
-                  <p className="text-[11px] text-[#64748B]">Audited receipt log of payments collected from fishers.</p>
+                  <p className="text-[11px] text-[#64748B]">Log of payments collected from fishers.</p>
                 </div>
               </div>
 
@@ -431,7 +431,7 @@ export const ImportExportPage = () => {
                 className="px-3 py-2 text-xs font-bold rounded-xl bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>{downloadingModule === 'payments-pdf' ? 'Generating PDF...' : 'PDF Report'}</span>
+                <span>{downloadingModule === 'payments-pdf' ? 'Generating PDF...' : 'PDF'}</span>
               </button>
               <button
                 disabled={downloadingModule === 'payments-excel'}
@@ -461,7 +461,7 @@ export const ImportExportPage = () => {
                 </div>
                 <div>
                   <h3 className="text-sm font-extrabold text-[#111827]">Clearance History Report</h3>
-                  <p className="text-[11px] text-[#64748B]">Log of official clearance tokens granted to fishers.</p>
+                  <p className="text-[11px] text-[#64748B]">Log of clearances granted to fishers.</p>
                 </div>
               </div>
 
@@ -506,7 +506,7 @@ export const ImportExportPage = () => {
                 className="px-3 py-2 text-xs font-bold rounded-xl bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>{downloadingModule === 'clearances-pdf' ? 'Generating PDF...' : 'PDF Report'}</span>
+                <span>{downloadingModule === 'clearances-pdf' ? 'Generating PDF...' : 'PDF'}</span>
               </button>
               <button
                 disabled={downloadingModule === 'clearances-excel'}
@@ -536,14 +536,14 @@ export const ImportExportPage = () => {
                 </div>
                 <div>
                   <h3 className="text-sm font-extrabold text-[#111827]">Block & Hold History Report</h3>
-                  <p className="text-[11px] text-[#64748B]">Audited history of manual admin blocks and holds applied or released.</p>
+                  <p className="text-[11px] text-[#64748B]">History of holds applied or released.</p>
                 </div>
               </div>
 
               {/* Filters */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
                 <div>
-                  <label className="text-[11px] font-bold text-[#475569] block mb-1">Search Keyword</label>
+                  <label className="text-[11px] font-bold text-[#475569] block mb-1">Search</label>
                   <input
                     type="text"
                     value={blockSearch}
@@ -553,7 +553,7 @@ export const ImportExportPage = () => {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-[#475569] block mb-1">Hold Status</label>
+                  <label className="text-[11px] font-bold text-[#475569] block mb-1">Status</label>
                   <select
                     value={blockStatus}
                     onChange={(e) => setBlockStatus(e.target.value)}
@@ -575,7 +575,7 @@ export const ImportExportPage = () => {
                 className="px-3 py-2 text-xs font-bold rounded-xl bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>{downloadingModule === 'block-history-pdf' ? 'Generating PDF...' : 'PDF Report'}</span>
+                <span>{downloadingModule === 'block-history-pdf' ? 'Generating PDF...' : 'PDF'}</span>
               </button>
               <button
                 disabled={downloadingModule === 'block-history-excel'}
@@ -612,10 +612,10 @@ export const ImportExportPage = () => {
                   <div className="w-7 h-7 rounded-xl bg-[#FFF7D6] flex items-center justify-center font-black text-xs text-[#111827]">
                     1
                   </div>
-                  <h3 className="text-sm font-extrabold text-[#111827]">Download Official Template</h3>
+                  <h3 className="text-sm font-extrabold text-[#111827]">Download Template</h3>
                 </div>
                 <p className="text-xs text-[#64748B] leading-relaxed">
-                  Use our standardized Excel template with pre-formatted column headers: Full Name, NIC, Phone Number, Boat Number, Address, Status, and Notes.
+                  Excel template with standard column headers: Full Name, NIC, Phone Number, Boat Number, Address, Status, Notes.
                 </p>
               </div>
 
@@ -625,7 +625,7 @@ export const ImportExportPage = () => {
                   className="w-full py-2.5 rounded-xl bg-[#FFF7D6] border border-[#FFD978] text-[#111827] text-xs font-bold hover:bg-[#FFEFA6] transition-colors flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Download className="w-4 h-4 text-[#F5B942]" />
-                  <span>Download Excel Template (.xlsx)</span>
+                  <span>Download Template (.xlsx)</span>
                 </button>
               </div>
             </div>
@@ -637,10 +637,10 @@ export const ImportExportPage = () => {
                   <div className="w-7 h-7 rounded-xl bg-[#FFF7D6] flex items-center justify-center font-black text-xs text-[#111827]">
                     2
                   </div>
-                  <h3 className="text-sm font-extrabold text-[#111827]">Upload Completed Spreadsheet</h3>
+                  <h3 className="text-sm font-extrabold text-[#111827]">Upload Spreadsheet</h3>
                 </div>
                 <p className="text-xs text-[#64748B] leading-relaxed">
-                  Select your `.xlsx`, `.xls`, or `.csv` file for automated Sri Lankan NIC and phone validation.
+                  Select `.xlsx`, `.xls`, or `.csv` file for automated NIC and phone validation.
                 </p>
               </div>
 
@@ -662,7 +662,7 @@ export const ImportExportPage = () => {
                   ) : (
                     <FileCheck className="w-4 h-4 text-[#F5B942]" />
                   )}
-                  <span>{isUploading ? 'Validating Spreadsheet...' : 'Validate & Preview Import'}</span>
+                  <span>{isUploading ? 'Validating...' : 'Validate & Preview'}</span>
                 </button>
               </div>
             </div>
@@ -673,9 +673,9 @@ export const ImportExportPage = () => {
             <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6 shadow-2xs space-y-5 animate-fadeIn">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E5E7EB] pb-4">
                 <div>
-                  <h3 className="text-base font-extrabold text-[#111827]">Import Preview & Validation Summary</h3>
+                  <h3 className="text-base font-extrabold text-[#111827]">Import Preview</h3>
                   <p className="text-xs text-[#64748B] mt-0.5">
-                    Review validated rows before final database commit. Valid rows will be assigned sequential Fisher IDs (`FIS-XXXXXX`).
+                    Review validated rows before final database commit.
                   </p>
                 </div>
 
@@ -743,7 +743,7 @@ export const ImportExportPage = () => {
                     className="px-3 py-1.5 text-xs font-bold rounded-xl bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-colors flex items-center gap-1.5 cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Error Report (.csv)</span>
+                    <span>Error Report (.csv)</span>
                   </button>
                 )}
               </div>
@@ -757,9 +757,9 @@ export const ImportExportPage = () => {
                       <th className="px-4 py-3">Full Name</th>
                       <th className="px-4 py-3">NIC</th>
                       <th className="px-4 py-3">Phone</th>
-                      <th className="px-4 py-3">Boat No</th>
+                      <th className="px-4 py-3">Boat No.</th>
                       <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Validation Result</th>
+                      <th className="px-4 py-3">Result</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E5E7EB]">
@@ -821,7 +821,7 @@ export const ImportExportPage = () => {
                   }}
                   className="px-4 py-2 text-xs font-bold rounded-xl border border-[#E5E7EB] text-[#475569] hover:bg-slate-50 transition-colors cursor-pointer"
                 >
-                  Cancel / Clear File
+                  Cancel
                 </button>
 
                 <button
@@ -834,7 +834,7 @@ export const ImportExportPage = () => {
                   ) : (
                     <ArrowRight className="w-4 h-4" />
                   )}
-                  <span>{isImporting ? 'Importing Fishers...' : `Confirm & Import ${previewResult.validCount} Valid Fishers`}</span>
+                  <span>{isImporting ? 'Importing...' : `Import ${previewResult.validCount} Fishers`}</span>
                 </button>
               </div>
             </div>

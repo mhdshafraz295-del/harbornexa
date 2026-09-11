@@ -247,14 +247,14 @@ export const QrScannerPage = () => {
               <QrCode className="w-6 h-6 text-[#111827]" />
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111827] tracking-tight">
-              Admin QR Scanner
+              QR Scanner
             </h1>
             <span className="px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-300 text-[11px] font-extrabold text-slate-700">
-              Admin Protected
+              Admin
             </span>
           </div>
           <p className="text-xs sm:text-sm font-medium text-[#64748B]">
-            Scan a Fisher's secure QR card to verify real-time harbor clearance status.
+            Scan fisher QR card to verify clearance status.
           </p>
         </div>
 
@@ -292,7 +292,7 @@ export const QrScannerPage = () => {
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-extrabold text-[#111827] uppercase tracking-wider flex items-center gap-2">
                 <Camera className="w-4 h-4 text-slate-500" />
-                <span>Live Viewfinder</span>
+                <span>Camera Viewfinder</span>
               </h2>
               <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
                 isScanning ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'
@@ -311,9 +311,9 @@ export const QrScannerPage = () => {
                     <QrCode className="w-6 h-6 text-[#FFD978]" />
                   </div>
                   <div className="space-y-1">
-                    <p className="text-xs font-bold text-white">Scan a Fisher QR to check current clearance status.</p>
+                    <p className="text-xs font-bold text-white">Scan fisher QR card.</p>
                     <p className="text-[11px] font-semibold text-slate-400">
-                      Click "Start Scanner" above to enable your device camera.
+                      Click "Start Scanner" to enable camera.
                     </p>
                   </div>
                   <button
@@ -329,7 +329,7 @@ export const QrScannerPage = () => {
               {loadingVerify && (
                 <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-xs flex flex-col items-center justify-center text-white space-y-3">
                   <RefreshCw className="w-8 h-8 text-[#FFD978] animate-spin" />
-                  <p className="text-xs font-extrabold">Verifying Fisher QR Token...</p>
+                  <p className="text-xs font-extrabold">Verifying QR token...</p>
                 </div>
               )}
             </div>
@@ -349,9 +349,9 @@ export const QrScannerPage = () => {
           {/* Search Fallback Card */}
           <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-2xs space-y-4">
             <div className="space-y-1">
-              <h3 className="text-sm font-extrabold text-[#111827]">Can't scan QR?</h3>
+              <h3 className="text-sm font-extrabold text-[#111827]">Search Fallback</h3>
               <p className="text-xs font-medium text-[#64748B]">
-                Use Fisher search fallback by Name, NIC, Phone, Fisher ID, or Boat No.
+                Search fisher by Name, NIC, Phone, Fisher ID, or Boat No.
               </p>
             </div>
 
@@ -421,11 +421,11 @@ export const QrScannerPage = () => {
               <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-red-900 text-xs font-medium space-y-2">
                 <div className="flex items-center gap-2 font-bold text-red-800 text-sm">
                   <AlertOctagon className="w-5 h-5 text-red-600 shrink-0" />
-                  <span>Scan Verification Failed</span>
+                  <span>Verification Failed</span>
                 </div>
                 <p className="font-bold">{verifyError}</p>
                 <p className="text-[11px] text-red-700">
-                  Ensure the QR token is active, valid, and has not been revoked by Admin.
+                  Ensure QR token is active and valid.
                 </p>
               </div>
             )}
@@ -438,7 +438,7 @@ export const QrScannerPage = () => {
                 <div className={`p-4 rounded-2xl border ${statusConfig.boxBg} space-y-2`}>
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-80">
-                      Real-Time Clearance Status
+                      Clearance Status
                     </span>
                     <span className={`px-2.5 py-1 rounded-full text-xs font-extrabold border ${statusConfig.badgeBg} flex items-center gap-1`}>
                       <StatusIcon className="w-3.5 h-3.5" />
@@ -470,7 +470,7 @@ export const QrScannerPage = () => {
                 {/* Fisher Identity */}
                 <div className="bg-[#F5F6F8] border border-[#E5E7EB] rounded-2xl p-4 space-y-3 text-xs">
                   <span className="text-[10px] font-extrabold text-[#64748B] uppercase tracking-wider block">
-                    Fisher Identity
+                    Fisher Details
                   </span>
 
                   <div className="space-y-2">
@@ -500,7 +500,7 @@ export const QrScannerPage = () => {
                 <div className="bg-[#F5F6F8] border border-[#E5E7EB] rounded-2xl p-4 space-y-2 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-extrabold text-[#64748B] uppercase tracking-wider">
-                      மீதிக் கடன் Snapshot
+                      Outstanding Debt Snapshot
                     </span>
                     <Coins className="w-4 h-4 text-amber-600" />
                   </div>
@@ -521,7 +521,7 @@ export const QrScannerPage = () => {
                     onClick={() => navigate(`/admin/clearance?fisherId=${fisher.id}`)}
                     className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] rounded-xl text-xs font-extrabold transition-all cursor-pointer shadow-2xs"
                   >
-                    <span>View / Manage Clearance Page</span>
+                    <span>View Clearance</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
 
@@ -530,7 +530,7 @@ export const QrScannerPage = () => {
                     className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-[#E5E7EB] hover:bg-slate-50 text-[#111827] rounded-xl text-xs font-bold transition-all cursor-pointer"
                   >
                     <Camera className="w-4 h-4" />
-                    <span>Scan Another Fisher</span>
+                    <span>Scan Another</span>
                   </button>
                 </div>
 
@@ -539,9 +539,9 @@ export const QrScannerPage = () => {
               !verifyError && (
                 <div className="p-8 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#F5F6F8] text-center space-y-2">
                   <QrCode className="w-8 h-8 text-slate-400 mx-auto mb-1" />
-                  <p className="text-xs font-bold text-[#111827]">No scan result yet.</p>
+                  <p className="text-xs font-bold text-[#111827]">No Scan Result</p>
                   <p className="text-[11px] text-[#64748B]">
-                    Scan a Fisher's QR code or select a fisher using the search fallback to verify clearance status.
+                    Scan QR code or search for a fisher to verify clearance status.
                   </p>
                 </div>
               )

@@ -199,7 +199,7 @@ export const ClearancePage = () => {
             </span>
           </div>
           <p className="text-xs sm:text-sm font-medium text-[#64748B]">
-            Verify fisher eligibility, record trip charges, and grant official harbor departure clearance.
+            Verify fisher clearance eligibility and record trip charges.
           </p>
         </div>
       </div>
@@ -207,7 +207,7 @@ export const ClearancePage = () => {
       {/* Top Section: Quick Fisher Search */}
       <div className="relative">
         <div className="bg-white p-4 rounded-2xl border border-[#E5E7EB] shadow-2xs">
-          <label className="block text-xs font-bold text-[#111827] mb-2">Quick Fisher Search</label>
+          <label className="block text-xs font-bold text-[#111827] mb-2">Fisher Search</label>
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
@@ -215,7 +215,7 @@ export const ClearancePage = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={() => searchQuery.trim() && setShowDropdown(true)}
-              placeholder="Search by Name, NIC, Phone, Fisher ID, or Boat No..."
+              placeholder="Search by Name, NIC, Phone, Fisher ID, Boat No..."
               className="w-full pl-10 pr-10 py-2.5 bg-[#F5F6F8] border border-[#E5E7EB] rounded-xl text-xs font-semibold text-[#111827] focus:outline-none focus:border-[#F5B942] focus:ring-2 focus:ring-[#FFD978] transition-all"
             />
             {searchLoading && (
@@ -272,7 +272,7 @@ export const ClearancePage = () => {
           </div>
           <h3 className="text-sm font-extrabold text-[#111827]">No Fisher Selected</h3>
           <p className="text-xs text-[#64748B] max-w-sm mx-auto">
-            Search for a fisher to check clearance eligibility, add trip charges, or grant harbor clearance.
+            Search for a fisher to check clearance eligibility or grant clearance.
           </p>
         </div>
       ) : loadingClearance ? (
@@ -337,7 +337,7 @@ export const ClearancePage = () => {
                     <span className="font-semibold text-emerald-700">Rs. {financialSummary?.totalPaid || '0.00'}</span>
                   </div>
                   <div className="flex justify-between items-center text-xs pt-1.5 border-t border-[#E5E7EB]">
-                    <span className="font-extrabold text-[#111827]">மீதிக் கடன்:</span>
+                    <span className="font-extrabold text-[#111827]">Outstanding Debt:</span>
                     <span className="font-extrabold text-red-600 font-mono text-sm">
                       Rs. {financialSummary?.outstandingDebt || '0.00'}
                     </span>
@@ -400,7 +400,7 @@ export const ClearancePage = () => {
                     className="flex items-center gap-2 px-4 py-2.5 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] text-xs font-extrabold rounded-xl transition-all shadow-2xs cursor-pointer"
                   >
                     <Plus className="w-4 h-4 text-[#111827]" />
-                    <span>Add New Charge / Debt</span>
+                    <span>Add Charge</span>
                   </button>
 
                   <button
@@ -450,11 +450,11 @@ export const ClearancePage = () => {
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="border-b border-[#E5E7EB] text-[10px] font-extrabold text-[#64748B] uppercase">
-                        <th className="py-2.5 px-3">Clearance No</th>
+                        <th className="py-2.5 px-3">Clearance No.</th>
                         <th className="py-2.5 px-3">Date & Time</th>
-                        <th className="py-2.5 px-3">Boat No</th>
+                        <th className="py-2.5 px-3">Boat No.</th>
                         <th className="py-2.5 px-3">Cleared By</th>
-                        <th className="py-2.5 px-3">மீதிக் கடன் Snapshot</th>
+                        <th className="py-2.5 px-3">Outstanding Debt Snapshot</th>
                         <th className="py-2.5 px-3">Status</th>
                       </tr>
                     </thead>
@@ -513,10 +513,10 @@ export const ClearancePage = () => {
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-[#E5E7EB] text-[10px] font-extrabold text-[#64748B] uppercase">
-                    <th className="py-3 px-3">Clearance No</th>
+                    <th className="py-3 px-3">Clearance No.</th>
                     <th className="py-3 px-3">Fisher</th>
                     <th className="py-3 px-3">Fisher ID</th>
-                    <th className="py-3 px-3">Boat No</th>
+                    <th className="py-3 px-3">Boat No.</th>
                     <th className="py-3 px-3">Time</th>
                     <th className="py-3 px-3">Cleared By</th>
                     <th className="py-3 px-3">Status</th>
@@ -603,7 +603,7 @@ export const ClearancePage = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[#111827] mb-1.5">Admin Notes (Optional)</label>
+              <label className="block text-xs font-bold text-[#111827] mb-1.5">Notes (Optional)</label>
               <textarea
                 rows={2}
                 value={grantNotes}
@@ -627,7 +627,7 @@ export const ClearancePage = () => {
                 disabled={isGranting}
                 className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl transition-all shadow-2xs cursor-pointer disabled:opacity-50"
               >
-                {isGranting ? 'Granting...' : 'Confirm & Grant Clearance'}
+                {isGranting ? 'Granting...' : 'Grant Clearance'}
               </button>
             </div>
           </div>

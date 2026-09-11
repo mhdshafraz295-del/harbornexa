@@ -87,14 +87,14 @@ export const ViewQrModal = ({ isOpen, onClose, fisher, rawToken, onReissue }) =>
         <body>
           <div class="card">
             <div class="header">Valachchenai Harbor</div>
-            <div class="subheader">Fisher Identification Card</div>
+            <div class="subheader">Fisher ID Card</div>
             <div class="fisher-name">${fisher.full_name}</div>
             <div class="fisher-id">${fisher.fisher_id}</div>
             ${fisher.boat_no ? `<div class="boat-no">Boat: ${fisher.boat_no}</div>` : ''}
             <div class="qr-container">
               ${document.getElementById('fisher-qr-code-svg')?.outerHTML || ''}
             </div>
-            <div class="footer-text">Present this QR for harbor clearance verification.</div>
+            <div class="footer-text">Present QR for harbor clearance.</div>
           </div>
           <script>
             window.onload = function() {
@@ -189,7 +189,7 @@ export const ViewQrModal = ({ isOpen, onClose, fisher, rawToken, onReissue }) =>
             </div>
 
             <p className="text-[10px] font-semibold text-[#64748B]">
-              Present this QR for harbor clearance verification.
+              Present QR for harbor clearance.
             </p>
           </div>
 
@@ -197,10 +197,10 @@ export const ViewQrModal = ({ isOpen, onClose, fisher, rawToken, onReissue }) =>
           <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-left text-[11px] text-slate-600 space-y-1">
             <div className="flex items-center gap-1.5 font-bold text-slate-800">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>Opaque Token Protection</span>
+              <span>Token Protection</span>
             </div>
             <p>
-              This QR encodes a secure random token only. Personal data and financial state are retrieved live upon Admin scan.
+              Encodes secure token only. Data retrieved live upon scan.
             </p>
           </div>
 
@@ -235,7 +235,7 @@ export const ViewQrModal = ({ isOpen, onClose, fisher, rawToken, onReissue }) =>
               className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-red-200 hover:bg-red-50 text-red-700 rounded-xl text-xs font-extrabold transition-colors cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>Reissue QR (Revokes Current)</span>
+              <span>Reissue QR</span>
             </button>
           )}
 

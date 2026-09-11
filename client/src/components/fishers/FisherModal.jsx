@@ -92,12 +92,12 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] bg-[#F5F6F8]">
           <div>
             <h2 className="text-lg font-extrabold text-[#111827]">
-              {isEditMode ? 'Edit Fisher Record' : 'Register New Fisher'}
+              {isEditMode ? 'Edit Fisher' : 'Add Fisher'}
             </h2>
             <p className="text-xs text-[#64748B] mt-0.5">
               {isEditMode
-                ? `Updating Fisher ID: ${fisher?.fisher_id}`
-                : 'Enter fisher identity details for Valachchenai Harbor records.'}
+                ? `Fisher ID: ${fisher?.fisher_id}`
+                : 'Enter fisher details below.'}
             </p>
           </div>
           <button
@@ -122,7 +122,7 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
           {/* Fisher ID Badge if Editing */}
           {isEditMode && (
             <div className="p-3 rounded-xl bg-[#FFF7D6] border border-[#FFD978] flex items-center justify-between text-xs">
-              <span className="font-semibold text-[#111827]">System Fisher ID (Immutable):</span>
+              <span className="font-semibold text-[#111827]">Fisher ID:</span>
               <span className="font-extrabold text-[#111827] tracking-wider px-2 py-0.5 rounded bg-white border border-[#F5B942]">
                 {fisher?.fisher_id}
               </span>
@@ -156,7 +156,7 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
             {/* NIC */}
             <div>
               <label className="block text-xs font-bold text-[#111827] mb-1">
-                Sri Lankan NIC <span className="text-red-500">*</span>
+                NIC <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -168,7 +168,7 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
                   required
                   value={formData.nic}
                   onChange={handleChange}
-                  placeholder="e.g. 991234567V or 200527001738"
+                  placeholder="e.g. 991234567V"
                   className="w-full pl-9 pr-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-sm text-[#111827] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FFD978] focus:border-[#F5B942]"
                 />
               </div>
@@ -176,7 +176,7 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
 
             {/* Phone */}
             <div>
-              <label className="block text-xs font-bold text-[#111827] mb-1">Phone Number</label>
+              <label className="block text-xs font-bold text-[#111827] mb-1">Phone</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                   <Phone className="w-4 h-4" />
@@ -198,7 +198,7 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
             
             {/* Boat No */}
             <div>
-              <label className="block text-xs font-bold text-[#111827] mb-1">Boat Number</label>
+              <label className="block text-xs font-bold text-[#111827] mb-1">Boat No.</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                   <Ship className="w-4 h-4" />
@@ -216,7 +216,7 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
 
             {/* Status */}
             <div>
-              <label className="block text-xs font-bold text-[#111827] mb-1">Initial Status</label>
+              <label className="block text-xs font-bold text-[#111827] mb-1">Status</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                   <Shield className="w-4 h-4" />
@@ -227,9 +227,9 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
                   onChange={handleChange}
                   className="w-full pl-9 pr-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FFD978] focus:border-[#F5B942] cursor-pointer"
                 >
-                  <option value="ACTIVE">ACTIVE (Cleared)</option>
-                  <option value="BLOCKED">BLOCKED (Restricted)</option>
-                  <option value="PENDING">PENDING (Verification)</option>
+                  <option value="ACTIVE">Active (Cleared)</option>
+                  <option value="BLOCKED">Blocked (Restricted)</option>
+                  <option value="PENDING">Pending (Review)</option>
                 </select>
               </div>
             </div>
@@ -237,7 +237,7 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
 
           {/* Address */}
           <div>
-            <label className="block text-xs font-bold text-[#111827] mb-1">Home Address</label>
+            <label className="block text-xs font-bold text-[#111827] mb-1">Address</label>
             <div className="relative">
               <div className="absolute top-2.5 left-0 pl-3 flex items-start pointer-events-none text-slate-400">
                 <MapPin className="w-4 h-4" />
@@ -247,7 +247,7 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
                 rows="2"
                 value={formData.address}
                 onChange={handleChange}
-                placeholder="e.g. Main Street, Valachchenai, Batticaloa"
+                placeholder="e.g. Main Street, Valachchenai"
                 className="w-full pl-9 pr-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-sm text-[#111827] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FFD978] focus:border-[#F5B942]"
               />
             </div>
@@ -255,7 +255,7 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
 
           {/* Notes */}
           <div>
-            <label className="block text-xs font-bold text-[#111827] mb-1">Admin Notes</label>
+            <label className="block text-xs font-bold text-[#111827] mb-1">Notes</label>
             <div className="relative">
               <div className="absolute top-2.5 left-0 pl-3 flex items-start pointer-events-none text-slate-400">
                 <FileText className="w-4 h-4" />
@@ -265,7 +265,7 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
                 rows="2"
                 value={formData.notes}
                 onChange={handleChange}
-                placeholder="Optional notes or remarks"
+                placeholder="Optional notes"
                 className="w-full pl-9 pr-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-sm text-[#111827] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FFD978] focus:border-[#F5B942]"
               />
             </div>
@@ -290,10 +290,10 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
               {submitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin text-[#111827]" />
-                  <span>{isEditMode ? 'Saving Changes...' : 'Adding Fisher...'}</span>
+                  <span>{isEditMode ? 'Saving...' : 'Adding...'}</span>
                 </>
               ) : (
-                <span>{isEditMode ? 'Save Changes' : 'Add Fisher'}</span>
+                <span>{isEditMode ? 'Save' : 'Add Fisher'}</span>
               )}
             </button>
           </div>

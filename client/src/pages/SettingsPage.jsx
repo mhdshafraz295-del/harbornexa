@@ -129,7 +129,7 @@ export const SettingsPage = () => {
             </span>
           </div>
           <p className="text-xs sm:text-sm font-medium text-[#64748B]">
-            Configure harbor system parameters, admin charge types, and clearance rules.
+            Configure system parameters and charge types.
           </p>
         </div>
 
@@ -151,8 +151,8 @@ export const SettingsPage = () => {
               <Coins className="w-5 h-5 text-[#F5B942]" />
             </div>
             <div>
-              <h2 className="text-base font-extrabold text-[#111827]">Charge Types Management</h2>
-              <p className="text-xs text-[#64748B]">Configure harbor trip fee categories and default amounts</p>
+              <h2 className="text-base font-extrabold text-[#111827]">Charge Types</h2>
+              <p className="text-xs text-[#64748B]">Manage trip fee categories and default amounts.</p>
             </div>
           </div>
 
@@ -176,9 +176,9 @@ export const SettingsPage = () => {
           <div className="p-8 text-center text-xs text-[#64748B]">Loading charge types...</div>
         ) : chargeTypes.length === 0 ? (
           <div className="p-12 text-center bg-[#F5F6F8] rounded-2xl border border-[#E5E7EB] space-y-2">
-            <p className="text-xs font-extrabold text-[#111827]">No charge types configured yet.</p>
+            <p className="text-xs font-extrabold text-[#111827]">No charge types configured.</p>
             <p className="text-[11px] text-[#64748B]">
-              Add a new charge type to allow trip fees to be recorded for fishers.
+              Add a charge type to record trip fees.
             </p>
           </div>
         ) : (
@@ -186,7 +186,7 @@ export const SettingsPage = () => {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-[#E5E7EB] text-[10px] font-extrabold text-[#64748B] uppercase">
-                  <th className="py-3 px-3">Charge Type Name</th>
+                  <th className="py-3 px-3">Charge Type</th>
                   <th className="py-3 px-3">Default Amount</th>
                   <th className="py-3 px-3">Description</th>
                   <th className="py-3 px-3">Status</th>
@@ -253,13 +253,13 @@ export const SettingsPage = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-[#111827] mb-1.5">
-                  Charge Type Name <span className="text-red-500">*</span>
+                  Charge Type <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Harbor Departure Fee"
+                  placeholder="e.g. Departure Fee"
                   required
                   className="w-full px-3.5 py-2 bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold text-[#111827] focus:outline-none focus:border-[#F5B942]"
                 />
@@ -282,18 +282,18 @@ export const SettingsPage = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#111827] mb-1.5">Description (Optional)</label>
+                <label className="block text-xs font-bold text-[#111827] mb-1.5">Description</label>
                 <textarea
                   rows={2}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Charge description..."
+                  placeholder="Description"
                   className="w-full px-3.5 py-2 bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold text-[#111827] focus:outline-none focus:border-[#F5B942]"
                 />
               </div>
 
               <div className="flex items-center justify-between pt-1">
-                <span className="text-xs font-bold text-[#111827]">Active Status</span>
+                <span className="text-xs font-bold text-[#111827]">Status</span>
                 <button
                   type="button"
                   onClick={() => setIsActive(!isActive)}
@@ -318,7 +318,7 @@ export const SettingsPage = () => {
                   disabled={submitting}
                   className="px-5 py-2 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] text-xs font-extrabold rounded-xl transition-all shadow-2xs cursor-pointer disabled:opacity-50"
                 >
-                  {submitting ? 'Saving...' : 'Save Charge Type'}
+                  {submitting ? 'Saving...' : 'Save'}
                 </button>
               </div>
             </form>

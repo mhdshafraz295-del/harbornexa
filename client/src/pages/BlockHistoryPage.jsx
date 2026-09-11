@@ -144,11 +144,11 @@ export const BlockHistoryPage = () => {
   };
 
   const filterTabs = [
-    { id: 'ACTIVE', label: 'Active Manual Holds', count: metrics.activeManualCount },
+    { id: 'ACTIVE', label: 'Active Holds', count: metrics.activeManualCount },
     { id: 'HISTORY', label: 'Hold History', count: metrics.historyCount },
-    { id: 'DEBT', label: 'Debt Holds (Automatic)', count: metrics.debtCount },
+    { id: 'DEBT', label: 'Debt Holds', count: metrics.debtCount },
     { id: 'ADMIN_BLOCK', label: 'Admin Blocks', count: metrics.adminBlockCount },
-    { id: 'ALL', label: 'All Restrictions', count: null },
+    { id: 'ALL', label: 'All', count: null },
   ];
 
   const formatDate = (dateStr) => {
@@ -185,7 +185,7 @@ export const BlockHistoryPage = () => {
             </span>
           </div>
           <p className="text-xs sm:text-sm font-medium text-[#64748B]">
-            Audit active manual holds, historical releases, automatic debt holds, and admin blocks.
+            Audit manual holds, release history, debt holds, and admin blocks.
           </p>
         </div>
 
@@ -423,7 +423,7 @@ export const BlockHistoryPage = () => {
                 <thead className="sticky top-0 bg-[#F5F6F8] z-10 border-b border-[#E5E7EB] shadow-2xs">
                   <tr className="text-[11px] font-extrabold text-[#64748B] uppercase tracking-wider">
                     <th className="py-2.5 px-3.5">Fisher</th>
-                    <th className="py-2.5 px-3.5">Restriction Type / Reason</th>
+                    <th className="py-2.5 px-3.5">Reason</th>
                     <th className="py-2.5 px-3.5">Hold Date</th>
                     <th className="py-2.5 px-3.5">Status</th>
                     <th className="py-2.5 px-3.5">Release Details</th>
@@ -712,7 +712,7 @@ export const BlockHistoryPage = () => {
             <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
               <div className="flex items-center gap-2 text-emerald-700">
                 <ShieldCheck className="w-5 h-5" />
-                <h3 className="text-base font-extrabold text-[#111827]">Confirm Release Manual Hold</h3>
+                <h3 className="text-base font-extrabold text-[#111827]">Release Hold</h3>
               </div>
               <button
                 type="button"
@@ -725,7 +725,7 @@ export const BlockHistoryPage = () => {
 
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
               <div className="flex justify-between">
-                <span className="text-slate-500 font-semibold">Fisher Name:</span>
+                <span className="text-slate-500 font-semibold">Fisher:</span>
                 <span className="font-extrabold text-[#111827]">{releaseModalHold.full_name}</span>
               </div>
               <div className="flex justify-between">
@@ -742,14 +742,14 @@ export const BlockHistoryPage = () => {
 
             <div>
               <label className="block text-xs font-extrabold text-[#111827] mb-1">
-                Release Notes / Authorization Details <span className="text-red-600">*</span>
+                Release Notes <span className="text-red-600">*</span>
               </label>
               <textarea
                 rows={3}
                 required
                 value={releaseNotesInput}
                 onChange={(e) => setReleaseNotesInput(e.target.value)}
-                placeholder="Enter justification or document reference for releasing this hold..."
+                placeholder="Enter release notes..."
                 className="w-full p-3 bg-white border border-[#D1D5DB] rounded-xl text-xs text-[#111827] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FFD978]"
               />
             </div>

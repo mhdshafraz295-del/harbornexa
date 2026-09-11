@@ -107,7 +107,7 @@ export const ManageHoldModal = ({ isOpen, onClose, fisher, onHoldUpdated, onSucc
               <ShieldAlert className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-extrabold text-[#111827]">Manage Manual Holds</h2>
+              <h2 className="text-lg font-extrabold text-[#111827]">Manage Holds</h2>
               <p className="text-xs text-[#64748B] mt-0.5">
                 {fisher.full_name} ({fisher.fisher_id})
               </p>
@@ -144,7 +144,7 @@ export const ManageHoldModal = ({ isOpen, onClose, fisher, onHoldUpdated, onSucc
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] rounded-xl text-xs font-extrabold transition-all cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>+ Place New Hold</span>
+                  <span>+ Add Hold</span>
                 </button>
               </div>
 
@@ -224,11 +224,11 @@ export const ManageHoldModal = ({ isOpen, onClose, fisher, onHoldUpdated, onSucc
           {/* CREATE HOLD MODE */}
           {mode === 'CREATE' && (
             <form onSubmit={handleCreateSubmit} className="space-y-4">
-              <div className="text-xs font-extrabold text-[#111827]">Place Manual Non-Debt Hold</div>
+              <div className="text-xs font-extrabold text-[#111827]">Add Hold</div>
 
               <div>
                 <label className="block text-xs font-bold text-[#111827] mb-1">
-                  Reason Code <span className="text-red-500">*</span>
+                  Reason <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={createForm.reasonCode}
@@ -245,26 +245,26 @@ export const ManageHoldModal = ({ isOpen, onClose, fisher, onHoldUpdated, onSucc
               {createForm.reasonCode === 'OTHER' && (
                 <div>
                   <label className="block text-xs font-bold text-[#111827] mb-1">
-                    Specific Reason Text <span className="text-red-500">*</span>
+                    Reason Details <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
                     value={createForm.reasonText}
                     onChange={(e) => setCreateForm({ ...createForm, reasonText: e.target.value })}
-                    placeholder="Describe specific hold reason..."
+                    placeholder="Enter specific reason..."
                     className="w-full px-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FFD978]"
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-bold text-[#111827] mb-1">Hold Notes</label>
+                <label className="block text-xs font-bold text-[#111827] mb-1">Notes</label>
                 <textarea
                   rows="3"
                   value={createForm.notes}
                   onChange={(e) => setCreateForm({ ...createForm, notes: e.target.value })}
-                  placeholder="Additional details regarding this manual hold..."
+                  placeholder="Optional notes"
                   className="w-full px-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FFD978]"
                 />
               </div>
@@ -286,7 +286,7 @@ export const ManageHoldModal = ({ isOpen, onClose, fisher, onHoldUpdated, onSucc
                   {submitting ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    <span>Place Manual Hold</span>
+                    <span>Add Hold</span>
                   )}
                 </button>
               </div>
@@ -297,11 +297,11 @@ export const ManageHoldModal = ({ isOpen, onClose, fisher, onHoldUpdated, onSucc
           {mode === 'RELEASE' && selectedHoldToRelease && (
             <form onSubmit={handleReleaseSubmit} className="space-y-4">
               <div className="text-xs font-extrabold text-[#111827]">
-                Release Manual Hold: {selectedHoldToRelease.reason_code}
+                Release Hold: {selectedHoldToRelease.reason_code}
               </div>
 
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
-                You are releasing an active manual hold. Release notes are required for system audit records.
+                Enter release notes for audit records.
               </div>
 
               <div>
@@ -313,7 +313,7 @@ export const ManageHoldModal = ({ isOpen, onClose, fisher, onHoldUpdated, onSucc
                   required
                   value={releaseNotes}
                   onChange={(e) => setReleaseNotes(e.target.value)}
-                  placeholder="State why this hold is being released (e.g. Document verified)..."
+                  placeholder="Enter release notes..."
                   className="w-full px-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FFD978]"
                 />
               </div>
@@ -335,7 +335,7 @@ export const ManageHoldModal = ({ isOpen, onClose, fisher, onHoldUpdated, onSucc
                   {submitting ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    <span>Confirm Release Hold</span>
+                    <span>Release Hold</span>
                   )}
                 </button>
               </div>

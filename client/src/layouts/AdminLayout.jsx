@@ -75,7 +75,6 @@ export const AdminLayout = () => {
     { name: 'Departure PDF Checker', path: '/admin/departure-pdf-checker', icon: FileCheck },
     { name: 'Block History', path: '/admin/block-history', icon: Ban },
     { name: 'Import / Export', path: '/admin/import-export', icon: FileSpreadsheet },
-    { name: 'How to Use', path: '/admin/how-to-use', icon: HelpCircle },
     { name: 'Settings', path: '/admin/settings', icon: Settings },
   ];
 
@@ -122,7 +121,7 @@ export const AdminLayout = () => {
                 Valachchenai
               </h2>
               <p className="text-[10px] font-bold text-[#D9A441] tracking-wider uppercase">
-                Harbor Clearance
+                Clearance System
               </p>
             </div>
           </div>
@@ -175,7 +174,7 @@ export const AdminLayout = () => {
                 {admin?.name ? admin.name.charAt(0).toUpperCase() : 'A'}
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-extrabold text-[#111827] truncate">{admin?.name || 'Administrator'}</p>
+                <p className="text-xs font-extrabold text-[#111827] truncate">{admin?.name || 'Admin'}</p>
                 <p className="text-[10px] text-[#64748B] truncate">{admin?.email || 'admin@harbor.gov.lk'}</p>
               </div>
             </div>
@@ -214,7 +213,7 @@ export const AdminLayout = () => {
                   Valachchenai Harbor
                 </h1>
                 <p className="text-[10px] font-medium text-[#64748B] hidden md:block">
-                  Fisher Clearance Management System
+                  Clearance System
                 </p>
               </div>
             </div>
@@ -252,7 +251,7 @@ export const AdminLayout = () => {
               {isUserMenuOpen && (
                 <div className="absolute right-0 mt-2 w-56 bg-white border border-[#E5E7EB] rounded-2xl shadow-xl py-2 z-50 animate-fadeIn">
                   <div className="px-4 py-2.5 border-b border-[#E5E7EB] bg-[#F5F6F8]/50">
-                    <p className="text-xs font-bold text-[#111827] truncate">{admin?.name || 'Administrator'}</p>
+                    <p className="text-xs font-bold text-[#111827] truncate">{admin?.name || 'Admin'}</p>
                     <p className="text-[10px] font-medium text-[#64748B] truncate">{admin?.email || 'admin@harbor.gov.lk'}</p>
                     <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#FFF7D6] text-[10px] font-extrabold text-[#111827]">
                       <Shield className="w-3 h-3 text-[#F5B942]" />

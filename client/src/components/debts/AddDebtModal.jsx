@@ -96,9 +96,9 @@ export const AddDebtModal = ({ isOpen, onClose, onSubmit, targetFisher = null })
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] bg-[#F5F6F8]">
           <div>
-            <h2 className="text-lg font-extrabold text-[#111827]">Add Debt Record</h2>
+            <h2 className="text-lg font-extrabold text-[#111827]">Add Debt</h2>
             <p className="text-xs text-[#64748B] mt-0.5">
-              Record new harbor charge or arrears for a fisher.
+              Enter debt details.
             </p>
           </div>
           <button
@@ -131,7 +131,7 @@ export const AddDebtModal = ({ isOpen, onClose, onSubmit, targetFisher = null })
           ) : (
             <div>
               <label className="block text-xs font-bold text-[#111827] mb-1">
-                Select Fisher <span className="text-red-500">*</span>
+                Fisher <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -157,7 +157,7 @@ export const AddDebtModal = ({ isOpen, onClose, onSubmit, targetFisher = null })
           {/* Category & Suggestions */}
           <div>
             <label className="block text-xs font-bold text-[#111827] mb-1">
-              Debt Category <span className="text-red-500">*</span>
+              Category <span className="text-red-500">*</span>
             </label>
             <div className="relative mb-2">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -169,7 +169,7 @@ export const AddDebtModal = ({ isOpen, onClose, onSubmit, targetFisher = null })
                 required
                 value={formData.category}
                 onChange={handleChange}
-                placeholder="e.g. Harbor Service Charge"
+                placeholder="Enter category"
                 className="w-full pl-9 pr-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-sm text-[#111827] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FFD978]"
               />
             </div>
@@ -221,7 +221,7 @@ export const AddDebtModal = ({ isOpen, onClose, onSubmit, targetFisher = null })
             {/* Debt Date */}
             <div>
               <label className="block text-xs font-bold text-[#111827] mb-1">
-                Debt Date <span className="text-red-500">*</span>
+                Date <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -265,20 +265,20 @@ export const AddDebtModal = ({ isOpen, onClose, onSubmit, targetFisher = null })
               rows="2"
               value={formData.description}
               onChange={handleChange}
-              placeholder="e.g. Harbor vessel docking fee for current season"
+              placeholder="Enter description"
               className="w-full px-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-sm text-[#111827] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FFD978]"
             />
           </div>
 
           {/* Notes */}
           <div>
-            <label className="block text-xs font-bold text-[#111827] mb-1">Admin Notes</label>
+            <label className="block text-xs font-bold text-[#111827] mb-1">Notes</label>
             <textarea
               name="notes"
               rows="2"
               value={formData.notes}
               onChange={handleChange}
-              placeholder="Internal remarks or approval reference"
+              placeholder="Optional notes"
               className="w-full px-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-sm text-[#111827] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FFD978]"
             />
           </div>
@@ -302,10 +302,10 @@ export const AddDebtModal = ({ isOpen, onClose, onSubmit, targetFisher = null })
               {submitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin text-[#111827]" />
-                  <span>Adding Debt...</span>
+                  <span>Adding...</span>
                 </>
               ) : (
-                <span>Add Debt Record</span>
+                <span>Add Debt</span>
               )}
             </button>
           </div>

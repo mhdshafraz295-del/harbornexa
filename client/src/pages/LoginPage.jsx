@@ -32,7 +32,7 @@ export const LoginPage = () => {
     setErrorMsg('');
 
     if (!email.trim() || !password.trim()) {
-      setErrorMsg('Please enter both email and password.');
+      setErrorMsg('Enter email and password.');
       return;
     }
 
@@ -90,7 +90,7 @@ export const LoginPage = () => {
               Valachchenai Harbor
             </h1>
             <p className="text-xs font-semibold text-[#64748B] tracking-wide mt-0.5">
-              Fisher Clearance Management System
+              Clearance Management System
             </p>
             <div className="w-12 h-1 bg-[#FFD978] rounded-full mt-3" />
           </div>
@@ -108,7 +108,7 @@ export const LoginPage = () => {
             {/* Email Field */}
             <div>
               <label htmlFor="admin-email" className="block text-xs font-semibold text-[#374151] mb-1">
-                Email Address
+                Email
               </label>
               <div className="relative rounded-xl shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -205,7 +205,7 @@ export const LoginPage = () => {
           {/* Footer Note */}
           <div className="mt-5 pt-3 border-t border-[#E5E7EB] text-center space-y-1">
             <p className="text-[11px] font-medium text-[#64748B]">
-              Authorized Personnel Only • Valachchenai Harbor Authority
+              Authorized Personnel Only
             </p>
             <p className="text-[10px] font-medium text-[#94A3B8]">
               © 2026 Valachchenai Harbor. All rights reserved. • Designed &amp; Developed by{' '}
@@ -236,18 +236,18 @@ export const LoginPage = () => {
 
             <div className="flex items-center gap-2.5 text-[#F5B942] mb-3">
               <Info className="w-5 h-5 shrink-0" />
-              <h3 className="text-base font-bold text-[#111827]">Password Recovery</h3>
+              <h3 className="text-base font-bold text-[#111827]">Password Reset</h3>
             </div>
 
             <p className="text-xs text-[#374151] leading-relaxed mb-5">
-              Password resets are managed directly by Harbor Systems Administration. Please contact your system administrator to recover or reset your account credentials.
+              Contact system administrator to reset credentials.
             </p>
 
             <button
               onClick={() => setShowForgotModal(false)}
               className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-[#111827] font-semibold text-xs rounded-xl border border-slate-300 transition-colors cursor-pointer"
             >
-              Understand & Close
+              Close
             </button>
           </div>
         </div>

@@ -104,8 +104,8 @@ export const AddChargeModal = ({ isOpen, onClose, fisher, onSuccess, onNavigateT
               <Coins className="w-5 h-5 text-[#F5B942]" />
             </div>
             <div>
-              <h3 className="text-base font-extrabold text-[#111827]">Add New Charge / Debt</h3>
-              <p className="text-xs text-[#64748B]">New trip fee record for fisher</p>
+              <h3 className="text-base font-extrabold text-[#111827]">Add Charge</h3>
+              <p className="text-xs text-[#64748B]">Enter charge details.</p>
             </div>
           </div>
           <button
@@ -195,7 +195,7 @@ export const AddChargeModal = ({ isOpen, onClose, fisher, onSuccess, onNavigateT
                   className="w-full px-3.5 py-2.5 bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold text-[#111827] focus:outline-none focus:border-[#F5B942] focus:ring-2 focus:ring-[#FFD978]"
                 />
                 <p className="text-[10px] text-[#64748B] mt-1">
-                  Pre-filled with Charge Type default amount. You may adjust before confirming.
+                  Adjust default amount if needed.
                 </p>
               </div>
 
@@ -214,7 +214,7 @@ export const AddChargeModal = ({ isOpen, onClose, fisher, onSuccess, onNavigateT
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[#111827] mb-1.5">Due Date (Optional)</label>
+                  <label className="block text-xs font-bold text-[#111827] mb-1.5">Due Date</label>
                   <input
                     type="date"
                     value={dueDate}
@@ -226,24 +226,24 @@ export const AddChargeModal = ({ isOpen, onClose, fisher, onSuccess, onNavigateT
 
               {/* Description */}
               <div>
-                <label className="block text-xs font-bold text-[#111827] mb-1.5">Description (Optional)</label>
+                <label className="block text-xs font-bold text-[#111827] mb-1.5">Description</label>
                 <input
                   type="text"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="e.g. Harbor departure fee for Trip #12"
+                  placeholder="Enter description"
                   className="w-full px-3.5 py-2 bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold text-[#111827] focus:outline-none focus:border-[#F5B942]"
                 />
               </div>
 
               {/* Notes */}
               <div>
-                <label className="block text-xs font-bold text-[#111827] mb-1.5">Notes (Optional)</label>
+                <label className="block text-xs font-bold text-[#111827] mb-1.5">Notes</label>
                 <textarea
                   rows={2}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Additional admin remarks..."
+                  placeholder="Optional notes"
                   className="w-full px-3.5 py-2 bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold text-[#111827] focus:outline-none focus:border-[#F5B942]"
                 />
               </div>
@@ -262,7 +262,7 @@ export const AddChargeModal = ({ isOpen, onClose, fisher, onSuccess, onNavigateT
                   disabled={submitting}
                   className="px-5 py-2 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] text-xs font-extrabold rounded-xl transition-all shadow-2xs cursor-pointer disabled:opacity-50"
                 >
-                  {submitting ? 'Creating...' : 'Confirm New Charge'}
+                  {submitting ? 'Creating...' : 'Add Charge'}
                 </button>
               </div>
             </form>

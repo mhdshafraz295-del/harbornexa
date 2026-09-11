@@ -208,7 +208,7 @@ export const HowToUsePage = () => {
             <div>
               <h1 className="text-xl font-black text-[#111827] tracking-tight">How to Use</h1>
               <p className="text-xs text-[#64748B] mt-1 font-medium leading-relaxed">
-                Simple step-by-step guide to use the Valachchenai Harbor Fisher Clearance Management System.
+                Step-by-step guide for Valachchenai Harbor System.
               </p>
               <p className="text-xs font-bold text-[#D9A441] mt-1 bg-[#FFF7D6] inline-block px-2.5 py-1 rounded-lg border border-[#FFD978]">
                 இந்த வழிகாட்டி முக்கிய செயல்களை எளிதாகப் புரிந்து பயன்படுத்த உதவும்.

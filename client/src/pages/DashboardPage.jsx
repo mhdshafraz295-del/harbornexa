@@ -186,7 +186,7 @@ export const DashboardPage = () => {
     {
       title: 'Total Fishers',
       value: metrics.totalFishers,
-      helper: 'Registered harbor fishers',
+      helper: 'Registered fishers',
       icon: Users,
       color: 'text-[#111827]',
       accentBg: 'bg-[#FFF7D6]',
@@ -197,7 +197,7 @@ export const DashboardPage = () => {
     {
       title: 'Active / Cleared',
       value: metrics.active,
-      helper: 'Cleared for harbor departure',
+      helper: 'Cleared for departure',
       icon: UserCheck,
       color: 'text-emerald-700',
       accentBg: 'bg-emerald-50',
@@ -208,7 +208,7 @@ export const DashboardPage = () => {
     {
       title: 'Blocked / Hold',
       value: metrics.blocked,
-      helper: 'Restricted from harbor clearance',
+      helper: 'Clearance restricted',
       icon: UserX,
       color: 'text-red-700',
       accentBg: 'bg-red-50',
@@ -219,7 +219,7 @@ export const DashboardPage = () => {
     {
       title: 'Pending',
       value: metrics.pending,
-      helper: 'Under identity verification',
+      helper: 'Pending verification',
       icon: Clock,
       color: 'text-amber-700',
       accentBg: 'bg-amber-50',
@@ -228,9 +228,9 @@ export const DashboardPage = () => {
       targetRoute: '/admin/fishers?status=PENDING',
     },
     {
-      title: 'மீதிக் கடன்',
+      title: 'Outstanding Debt',
       value: `Rs. ${metrics.outstandingDebt}`,
-      helper: 'Unpaid harbor dues & charges',
+      helper: 'Unpaid dues',
       icon: Coins,
       color: 'text-[#111827]',
       accentBg: 'bg-[#FFF7D6]',
@@ -248,16 +248,16 @@ export const DashboardPage = () => {
   ];
 
   const quickActions = [
-    { label: 'Add Fisher', icon: Plus, subtitle: 'Register new fisher', onClick: handleOpenAddModal, active: true },
-    { label: 'Record Payment', icon: Receipt, subtitle: 'Settle debt balance', onClick: () => navigate('/admin/debt-payments'), active: true },
-    { label: 'Check Clearance', icon: Calendar, subtitle: 'Issue clearance certificate', onClick: () => navigate('/admin/clearance'), active: true },
+    { label: 'Add Fisher', icon: Plus, subtitle: 'Register fisher', onClick: handleOpenAddModal, active: true },
+    { label: 'Record Payment', icon: Receipt, subtitle: 'Settle debt', onClick: () => navigate('/admin/debt-payments'), active: true },
+    { label: 'Check Clearance', icon: Calendar, subtitle: 'Issue clearance', onClick: () => navigate('/admin/clearance'), active: true },
   ];
 
   const operationalOverview = [
     { title: 'Active Fishers', value: metrics.active, status: 'Cleared', color: 'text-emerald-700 bg-emerald-50 border-emerald-200', route: '/admin/fishers?status=ACTIVE' },
     { title: 'Blocked Fishers', value: metrics.blocked, status: 'Restricted', color: 'text-red-700 bg-red-50 border-red-200', route: '/admin/fishers?status=BLOCKED' },
     { title: 'Pending Clearance', value: metrics.pending, status: 'Awaiting', color: 'text-amber-700 bg-amber-50 border-amber-200', route: '/admin/fishers?status=PENDING' },
-    { title: 'மீதிக் கடன்', value: `Rs. ${metrics.outstandingDebt}`, status: 'Dues (0.00)', color: 'text-[#111827] bg-[#FFF7D6] border-[#FFD978]', route: null },
+    { title: 'Outstanding Debt', value: `Rs. ${metrics.outstandingDebt}`, status: 'Dues', color: 'text-[#111827] bg-[#FFF7D6] border-[#FFD978]', route: null },
   ];
 
   return (
@@ -271,11 +271,11 @@ export const DashboardPage = () => {
               Dashboard
             </h1>
             <span className="px-2.5 py-0.5 rounded-full bg-[#FFF7D6] border border-[#FFD978] text-[11px] font-extrabold text-[#111827]">
-              System Overview
+              Overview
             </span>
           </div>
           <p className="text-xs sm:text-sm font-medium text-[#64748B]">
-            Valachchenai Harbor Fisher Clearance Management System
+            Valachchenai Harbor Clearance System
           </p>
         </div>
 
@@ -286,7 +286,7 @@ export const DashboardPage = () => {
             className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-[#FFF7D6] text-[#111827] border border-[#E5E7EB] hover:border-[#FFD978] rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-[#F5B942] ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh Data</span>
+            <span>Refresh</span>
           </button>
         </div>
       </div>
@@ -354,10 +354,10 @@ export const DashboardPage = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-base sm:text-lg font-extrabold text-[#111827]">
-              Quick Fisher Search
+              Fisher Search
             </h2>
             <p className="text-xs text-[#64748B] mt-0.5">
-              Search a fisher instantly by Name, NIC, Phone, Fisher ID or Boat No.
+              Search by Name, NIC, ID, or Boat No.
             </p>
           </div>
           
@@ -389,7 +389,7 @@ export const DashboardPage = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => searchQuery.trim() && setShowDropdown(true)}
-            placeholder="Type to search by Name, NIC, Phone, Fisher ID or Boat No..."
+            placeholder="Search by Name, NIC, Phone, ID, or Boat No..."
             className="w-full pl-11 pr-4 py-3 bg-white border border-[#D1D5DB] rounded-xl text-sm text-[#111827] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FFD978] focus:border-[#F5B942]"
           />
 
@@ -399,11 +399,11 @@ export const DashboardPage = () => {
               {searchLoading ? (
                 <div className="p-4 text-xs font-semibold text-slate-500 flex items-center gap-2">
                   <RefreshCw className="w-4 h-4 animate-spin text-[#F5B942]" />
-                  <span>Searching harbor database...</span>
+                  <span>Searching database...</span>
                 </div>
               ) : searchResults.length === 0 ? (
                 <div className="p-4 text-xs font-medium text-slate-500 text-center">
-                  No matching fisher records found for "{searchQuery}".
+                  No records found for "{searchQuery}".
                 </div>
               ) : (
                 searchResults.map((fisher) => (
@@ -467,11 +467,11 @@ export const DashboardPage = () => {
           </div>
           <h3 className="text-sm font-extrabold text-[#111827]">
             {metrics.totalFishers > 0
-              ? `${metrics.totalFishers} Fisher Records Active in Database`
-              : 'No fishers registered yet.'}
+              ? `${metrics.totalFishers} Registered Fishers`
+              : 'No fishers registered.'}
           </h3>
           <p className="text-xs text-[#64748B] mt-1 max-w-md mx-auto">
-            Use the search bar above or navigate to the Fishers page to view, register, edit, or block harbor fishers.
+            Use search or navigate to Fishers to manage records.
           </p>
         </div>
       </div>
@@ -479,7 +479,7 @@ export const DashboardPage = () => {
       {/* Quick Actions Grid */}
       <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 shadow-2xs">
         <h2 className="text-base font-extrabold text-[#111827] mb-1">Quick Actions</h2>
-        <p className="text-xs text-[#64748B] mb-4">Frequently used harbor administration shortcuts</p>
+        <p className="text-xs text-[#64748B] mb-4">System shortcuts</p>
         
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {quickActions.map((action, idx) => {
@@ -516,7 +516,7 @@ export const DashboardPage = () => {
               <Activity className="w-5 h-5 text-[#F5B942]" />
               <h2 className="text-base font-extrabold text-[#111827]">Operational Overview</h2>
             </div>
-            <span className="text-xs font-semibold text-[#64748B]">Real-time Summary</span>
+            <span className="text-xs font-semibold text-[#64748B]">Real-time</span>
           </div>
 
           <div className="space-y-3">
@@ -547,7 +547,7 @@ export const DashboardPage = () => {
               <Clock3 className="w-5 h-5 text-[#F5B942]" />
               <h2 className="text-base font-extrabold text-[#111827]">Recent Activity</h2>
             </div>
-            <span className="text-xs font-semibold text-[#64748B]">System Audit Logs</span>
+            <span className="text-xs font-semibold text-[#64748B]">Audit Logs</span>
           </div>
 
           {recentActivity.length > 0 ? (
@@ -578,7 +578,7 @@ export const DashboardPage = () => {
             </div>
           ) : (
             <div className="p-8 rounded-xl border border-dashed border-[#E5E7EB] text-center bg-[#F5F6F8]">
-              <p className="text-xs font-bold text-[#64748B]">No recent activity logged yet.</p>
+              <p className="text-xs font-bold text-[#64748B]">No recent activity.</p>
             </div>
           )}
         </div>
