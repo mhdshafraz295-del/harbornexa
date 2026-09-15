@@ -485,7 +485,7 @@ export const EmailInboxDrawer = ({
           )}
 
           {/* Email List Cards */}
-          <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
+          <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
             {displayedEmails.map((email) => {
               const formattedDate = new Date(email.date).toLocaleTimeString([], {
                 hour: '2-digit',
@@ -667,6 +667,18 @@ export const EmailInboxDrawer = ({
               );
             })}
           </div>
+
+          {/* Bottom Footer Showing Status */}
+          {displayedEmails.length > 0 && (
+            <div className="pt-2 flex items-center justify-between text-[11px] text-[#64748B] border-t border-[#F1F5F9] px-1">
+              <span>
+                Showing <strong>{displayedEmails.length}</strong> of <strong>{emails.length}</strong> loaded emails
+              </span>
+              <span className="text-[10px] text-[#94A3B8] font-medium">
+                Scroll down inside box to view all manifests ↓
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>
