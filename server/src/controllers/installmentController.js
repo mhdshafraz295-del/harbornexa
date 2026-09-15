@@ -112,6 +112,7 @@ async function listInstallmentPlans(req, res) {
           select: {
             id: true,
             original_amount: true,
+            category: true,
             description: true,
             status: true,
             debt_payments: {
@@ -157,6 +158,10 @@ async function listInstallmentPlans(req, res) {
         ? plan.first_due_date.toISOString().slice(0, 10)
         : String(plan.first_due_date).slice(0, 10);
 
+      const firstUnpaidDue = (coverage.duesWithCoverage || []).find((d) => !d.isPaid);
+      const nextDueDateStr = firstUnpaidDue ? firstUnpaidDue.due_date_str : null;
+      const nextDueAmount = firstUnpaidDue ? firstUnpaidDue.unpaidAmount || firstUnpaidDue.due_amount : 0;
+
       return {
         id: plan.id.toString(),
         fisherId: fisherObj ? fisherObj.id.toString() : '',
@@ -165,6 +170,12 @@ async function listInstallmentPlans(req, res) {
         nicNumber: fisherObj ? fisherObj.nic : '',
         debtId: plan.debt_id.toString(),
         debtDescription: debtObj ? debtObj.description : null,
+        debtCategory: debtObj ? debtObj.category : 'Fisher Loan',
+        originalAmount: debtOriginalAmt,
+        totalPaid: Number(validPaid.toFixed(2)),
+        outstandingBalance: debtCurrentBalance,
+        nextDueDate: nextDueDateStr,
+        nextDueAmount: Number(nextDueAmount),
         startingBalance: Number(plan.starting_balance),
         startingPaymentId: plan.starting_payment_id.toString(),
         monthlyInstallmentAmount: Number(plan.monthly_amount),

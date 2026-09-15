@@ -79,6 +79,15 @@ const getDebts = async (req, res, next) => {
           where: { reversed_at: null },
           select: { amount: true },
         },
+        installment_plans: {
+          where: { status: 'ACTIVE' },
+          select: {
+            id: true,
+            monthly_amount: true,
+            status: true,
+            total_installments: true,
+          },
+        },
       },
       orderBy: { id: 'desc' },
       skip,
@@ -118,6 +127,12 @@ const getDebts = async (req, res, next) => {
         base_fisher_status: d.fishers.status,
         total_paid: paid.toFixed(2),
         outstanding_amount: outstanding.toFixed(2),
+        active_installment_plan: (d.installment_plans && d.installment_plans.length > 0) ? {
+          id: Number(d.installment_plans[0].id),
+          monthly_amount: Number(d.installment_plans[0].monthly_amount),
+          total_installments: d.installment_plans[0].total_installments,
+          status: d.installment_plans[0].status,
+        } : null,
       };
     });
 
@@ -237,7 +252,20 @@ const getDebts = async (req, res, next) => {
 const createDebt = async (req, res, next) => {
   try {
     const { fisherId } = req.params;
-    const { chargeTypeId, charge_type_id, category, description, originalAmount, debtDate, dueDate, notes } = req.body;
+    const {
+      chargeTypeId,
+      charge_type_id,
+      category,
+      description,
+      originalAmount,
+      debtDate,
+      dueDate,
+      notes,
+      enableInstallmentPlan,
+      monthlyInstallmentAmount,
+      firstDueDate,
+      graceDays,
+    } = req.body;
 
     const targetChargeTypeId = chargeTypeId || charge_type_id;
 
@@ -318,6 +346,24 @@ const createDebt = async (req, res, next) => {
       });
     });
 
+    let createdInstallmentPlan = null;
+    if (enableInstallmentPlan && monthlyInstallmentAmount && Number(monthlyInstallmentAmount) > 0) {
+      try {
+        const { createInstallmentPlan } = require('../services/installmentService');
+        createdInstallmentPlan = await createInstallmentPlan({
+          adminId: req.admin?.id || 1,
+          debtId: newDebt.id,
+          fisherId: fisher.id,
+          monthlyInstallmentAmount: Number(monthlyInstallmentAmount),
+          firstDueDate: firstDueDate || dueDate || validDebtDateStr,
+          gracePeriodDays: Number(graceDays) || 0,
+          notes: notes ? `Loan Plan: ${notes}` : `Auto-created installment plan for ${finalCategory}`,
+        });
+      } catch (planErr) {
+        console.warn('Installment plan creation warning during debt creation:', planErr.message);
+      }
+    }
+
     await logAudit({
       adminId: req.admin?.id || null,
       action: 'DEBT_CREATED',
@@ -330,6 +376,7 @@ const createDebt = async (req, res, next) => {
         chargeTypeId: finalChargeTypeId ? Number(finalChargeTypeId) : null,
         category: finalCategory,
         originalAmount: decAmount.toFixed(2),
+        hasInstallmentPlan: !!createdInstallmentPlan,
       },
     });
 
@@ -340,11 +387,19 @@ const createDebt = async (req, res, next) => {
       charge_type_id: newDebt.charge_type_id ? Number(newDebt.charge_type_id) : null,
       created_by_admin_id: Number(newDebt.created_by_admin_id),
       original_amount: decAmount.toFixed(2),
+      active_installment_plan: createdInstallmentPlan ? {
+        id: Number(createdInstallmentPlan.id),
+        monthly_amount: Number(createdInstallmentPlan.monthly_amount),
+        total_installments: createdInstallmentPlan.total_installments,
+        status: createdInstallmentPlan.status,
+      } : null,
     };
 
     return res.status(201).json({
       success: true,
-      message: 'Debt record created successfully.',
+      message: createdInstallmentPlan
+        ? 'Debt and monthly installment plan created successfully.'
+        : 'Debt record created successfully.',
       debt: formattedDebt,
     });
   } catch (error) {

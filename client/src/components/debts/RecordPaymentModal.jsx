@@ -69,6 +69,12 @@ export const RecordPaymentModal = ({ isOpen, onClose, onSubmit, debt }) => {
     }
   };
 
+  const numRemaining = parseFloat(debt?.outstanding_amount || '0') || 0;
+  const numPayingNow = parseFloat(formData.amount || '0') || 0;
+  const balanceAfterPayment = Math.max(0, numRemaining - numPayingNow);
+  const isOverpaying = numPayingNow > numRemaining;
+  const isFullPayment = numPayingNow > 0 && Math.abs(numRemaining - numPayingNow) < 0.001;
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -78,7 +84,7 @@ export const RecordPaymentModal = ({ isOpen, onClose, onSubmit, debt }) => {
           <div>
             <h2 className="text-lg font-extrabold text-[#111827]">Record Payment</h2>
             <p className="text-xs text-[#64748B] mt-0.5">
-              Enter payment details.
+              Enter payment details and view live balance deduction.
             </p>
           </div>
           <button
@@ -101,17 +107,20 @@ export const RecordPaymentModal = ({ isOpen, onClose, onSubmit, debt }) => {
             <span className="font-extrabold">{debt.full_name} ({debt.custom_fisher_id})</span>
           </div>
           <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[#FFD978]/60 text-center">
-            <div className="p-1.5 bg-white/80 rounded-lg">
-              <div className="text-[10px] text-slate-500 font-semibold">Original</div>
-              <div className="font-bold text-[#111827]">Rs. {debt.original_amount}</div>
+            <div className="p-2 bg-white/90 rounded-lg border border-amber-200/60 shadow-2xs">
+              <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Original Loan</div>
+              <div className="text-[10px] text-slate-400 font-medium">அசல் கடன்</div>
+              <div className="font-extrabold text-[#111827] text-xs mt-0.5">Rs. {debt.original_amount}</div>
             </div>
-            <div className="p-1.5 bg-white/80 rounded-lg">
-              <div className="text-[10px] text-slate-500 font-semibold">Already Paid</div>
-              <div className="font-bold text-emerald-700">Rs. {debt.total_paid}</div>
+            <div className="p-2 bg-white/90 rounded-lg border border-emerald-200/60 shadow-2xs">
+              <div className="text-[10px] text-emerald-700 font-bold uppercase tracking-wider">Total Paid</div>
+              <div className="text-[10px] text-emerald-600 font-medium">இதுவரை கட்டியது</div>
+              <div className="font-extrabold text-emerald-700 text-xs mt-0.5">Rs. {debt.total_paid}</div>
             </div>
-            <div className="p-1.5 bg-white/80 rounded-lg">
-              <div className="text-[10px] text-slate-500 font-semibold">Outstanding</div>
-              <div className="font-extrabold text-red-700">Rs. {debt.outstanding_amount}</div>
+            <div className="p-2 bg-white/90 rounded-lg border border-red-200/60 shadow-2xs">
+              <div className="text-[10px] text-red-700 font-bold uppercase tracking-wider">Remaining</div>
+              <div className="text-[10px] text-red-600 font-medium">மீதமுள்ள இருப்பு</div>
+              <div className="font-black text-red-700 text-xs mt-0.5">Rs. {debt.outstanding_amount}</div>
             </div>
           </div>
         </div>
@@ -128,9 +137,18 @@ export const RecordPaymentModal = ({ isOpen, onClose, onSubmit, debt }) => {
 
           {/* Payment Amount */}
           <div>
-            <label className="block text-xs font-bold text-[#111827] mb-1">
-              Payment Amount (Rs.) <span className="text-red-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-[#111827]">
+                Payment Amount (இப்போது கட்டும் தொகை) <span className="text-red-500">*</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setFormData((prev) => ({ ...prev, amount: debt.outstanding_amount }))}
+                className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+              >
+                Pay Full (முழுவதும்)
+              </button>
+            </div>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                 <Coins className="w-4 h-4" />
@@ -148,9 +166,55 @@ export const RecordPaymentModal = ({ isOpen, onClose, onSubmit, debt }) => {
                 className="w-full pl-9 pr-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-sm font-extrabold text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FFD978]"
               />
             </div>
-            <p className="text-[10px] text-slate-500 mt-1">
-              Max payable: Rs. {debt.outstanding_amount}
-            </p>
+          </div>
+
+          {/* Dynamic Live Balance Deduction Card */}
+          <div className={`p-3.5 rounded-xl border transition-all ${
+            isOverpaying
+              ? 'bg-rose-50 border-rose-300 text-rose-800'
+              : isFullPayment
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+              : 'bg-[#FFFDF5] border-[#FFD978] text-[#111827]'
+          }`}>
+            <div className="flex items-center justify-between text-xs font-medium">
+              <span className="text-slate-600">Remaining Balance (மீதமுள்ள இருப்பு):</span>
+              <span className="font-extrabold text-slate-800">
+                Rs. {numRemaining.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs font-medium mt-1">
+              <span className="text-slate-600">Paying Now (இப்போது கட்டும் தொகை):</span>
+              <span className="font-extrabold text-[#111827]">
+                - Rs. {numPayingNow.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="border-t border-[#FFD978]/70 my-2 pt-2 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-extrabold block text-[#111827]">
+                  Balance after this payment:
+                </span>
+                <span className="text-[10px] text-slate-500 font-semibold block">
+                  (இந்த வரவுக்குப் பின் மீதி)
+                </span>
+              </div>
+              <span className={`text-base font-black font-mono ${
+                isOverpaying ? 'text-rose-700' : isFullPayment ? 'text-emerald-700' : 'text-blue-900'
+              }`}>
+                Rs. {balanceAfterPayment.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            {isFullPayment && (
+              <div className="text-[11px] font-extrabold text-emerald-700 flex items-center gap-1 mt-1 pt-1 border-t border-emerald-200">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Full loan will be settled! (முழுமையாகக் கடன் அடைக்கப்படும்)</span>
+              </div>
+            )}
+            {isOverpaying && (
+              <div className="text-[11px] font-extrabold text-rose-700 flex items-center gap-1 mt-1 pt-1 border-t border-rose-200">
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>Amount exceeds outstanding balance! (இருப்பை விட அதிகம்)</span>
+              </div>
+            )}
           </div>
 
           {/* Grid for Date & Method */}

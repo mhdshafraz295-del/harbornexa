@@ -15,7 +15,10 @@ import {
   FileText,
   AlertCircle,
   Ban,
+  CreditCard,
 } from 'lucide-react';
+import { RecordPaymentModal } from '../components/debts/RecordPaymentModal';
+import { recordPayment } from '../services/debtService';
 
 const formatMoney = (value) => {
   const number = Number(value);
@@ -35,6 +38,10 @@ export const InstallmentsPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [expandedPlanId, setExpandedPlanId] = useState(null);
+
+  // Record Payment Modal State
+  const [paymentDebt, setPaymentDebt] = useState(null);
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
 
   // Create Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -84,6 +91,28 @@ export const InstallmentsPage = () => {
   useEffect(() => {
     fetchPlansAndDebts();
   }, []);
+
+  const handleOpenPayment = (plan) => {
+    const orig = plan.originalAmount || plan.startingBalance || 0;
+    const paid = plan.totalPaid != null ? plan.totalPaid : 0;
+    const out = plan.outstandingBalance != null ? plan.outstandingBalance : Math.max(0, orig - paid);
+
+    setPaymentDebt({
+      id: plan.debtId,
+      category: plan.debtCategory || 'Fisher Loan (மீனவர் லோன்)',
+      full_name: plan.fisherName,
+      custom_fisher_id: plan.fisherCode,
+      original_amount: Number(orig).toFixed(2),
+      total_paid: Number(paid).toFixed(2),
+      outstanding_amount: Number(out).toFixed(2),
+    });
+    setIsPaymentOpen(true);
+  };
+
+  const handlePaymentSubmit = async (debtId, paymentData) => {
+    await recordPayment(debtId, paymentData);
+    await fetchPlansAndDebts();
+  };
 
   // Handle previewing schedule in modal
   const handlePreviewSchedule = async () => {
@@ -356,27 +385,33 @@ export const InstallmentsPage = () => {
                     </div>
 
                     {/* Plan Details */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-medium text-slate-600">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs font-medium text-slate-600">
                       <div>
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block">Original Balance</span>
-                        <span className="font-bold text-slate-900">Rs. {formatMoney(plan.startingBalance)}</span>
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">Original Loan</span>
+                        <span className="font-extrabold text-slate-900">Rs. {formatMoney(plan.originalAmount || plan.startingBalance)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-emerald-600 block">Total Paid (கட்டியது)</span>
+                        <span className="font-extrabold text-emerald-700">Rs. {formatMoney(plan.totalPaid || 0)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-red-600 block">Remaining (மீதி இருப்பு)</span>
+                        <span className="font-black text-red-700">
+                          Rs. {formatMoney(plan.outstandingBalance != null ? plan.outstandingBalance : (plan.startingBalance - (plan.totalPaid || 0)))}
+                        </span>
                       </div>
                       <div>
                         <span className="text-[10px] uppercase font-bold text-slate-400 block">Monthly Amount</span>
                         <span className="font-bold text-slate-900">Rs. {formatMoney(plan.monthlyInstallmentAmount)}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block">First Due Date</span>
-                        <span className="font-bold text-slate-900">{plan.firstDueDate}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block">Grace Period</span>
-                        <span className="font-bold text-slate-900">{plan.gracePeriodDays} days</span>
+                        <span className="text-[10px] uppercase font-bold text-blue-600 block">Next Due Date</span>
+                        <span className="font-extrabold text-blue-900">{plan.nextDueDate || plan.firstDueDate}</span>
                       </div>
                     </div>
 
                     {/* Status Badge & Actions */}
-                    <div className="flex items-center gap-3 self-end md:self-center">
+                    <div className="flex items-center gap-2.5 self-end md:self-center flex-wrap justify-end">
                       {hasManualReview ? (
                         <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
                           <AlertCircle className="w-3.5 h-3.5" /> MANUAL REVIEW
@@ -399,6 +434,17 @@ export const InstallmentsPage = () => {
                         </span>
                       )}
 
+                      {plan.status === 'ACTIVE' && (
+                        <button
+                          onClick={() => handleOpenPayment(plan)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black text-[#111827] bg-[#FFD978] hover:bg-[#F5B942] border border-[#D9A441]/60 shadow-2xs transition-all cursor-pointer"
+                          title="Record payment for this installment loan"
+                        >
+                          <CreditCard className="w-3.5 h-3.5 text-[#111827]" />
+                          <span>Record Payment</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => setExpandedPlanId(isExpanded ? null : plan.id)}
                         className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
@@ -414,9 +460,9 @@ export const InstallmentsPage = () => {
                             setCancellationReason('');
                             setCancelError(null);
                           }}
-                          className="px-3 py-1 rounded-lg text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer"
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer"
                         >
-                          Cancel Plan
+                          Cancel
                         </button>
                       )}
                     </div>
@@ -717,6 +763,16 @@ export const InstallmentsPage = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Record Payment Modal */}
+      {isPaymentOpen && (
+        <RecordPaymentModal
+          isOpen={isPaymentOpen}
+          onClose={() => setIsPaymentOpen(false)}
+          onSubmit={handlePaymentSubmit}
+          debt={paymentDebt}
+        />
       )}
     </div>
   );
