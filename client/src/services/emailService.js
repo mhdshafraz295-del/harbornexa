@@ -206,9 +206,10 @@ export const FALLBACK_EMAILS = [
 /**
  * Fetches recent departure manifest emails with attached PDFs
  */
-export const getEmailManifests = async (limit = 20) => {
+export const getEmailManifests = async (limit = 50, force = false) => {
   try {
-    const response = await api.get(`/email/manifests?limit=${limit}`);
+    const url = `/email/manifests?limit=${limit}${force ? '&force=true' : ''}`;
+    const response = await api.get(url);
     if (response.data && Array.isArray(response.data.emails) && response.data.emails.length > 0) {
       return response.data;
     }

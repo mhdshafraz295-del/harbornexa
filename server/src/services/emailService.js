@@ -317,10 +317,21 @@ function getMockDepartureEmails() {
   ];
 }
 
+let lastFetchCache = {
+  timestamp: 0,
+  limit: 0,
+  data: null,
+};
+
 /**
  * Fetches recent departure manifest emails from INBOX
  */
-async function fetchDepartureEmails({ limit = 15 } = {}) {
+async function fetchDepartureEmails({ limit = 50, force = false } = {}) {
+  // If not force-refreshing, return in-memory cached results within 45 seconds for high performance
+  if (!force && lastFetchCache.data && lastFetchCache.limit >= limit && Date.now() - lastFetchCache.timestamp < 45000) {
+    return lastFetchCache.data;
+  }
+
   // If credentials are not set, return mock demo emails with configured=false flag
   if (!env.email.user || !env.email.pass) {
     return {
@@ -409,11 +420,17 @@ async function fetchDepartureEmails({ limit = 15 } = {}) {
 
     await client.logout();
 
-    return {
+    const result = {
       configured: true,
       count: emails.length,
       emails,
     };
+    lastFetchCache = {
+      timestamp: Date.now(),
+      limit,
+      data: result,
+    };
+    return result;
   } catch (error) {
     console.error('IMAP fetch error:', error);
     // Return mock emails as fallback with error note

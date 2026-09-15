@@ -5,8 +5,9 @@ const emailService = require('../services/emailService');
  */
 async function getEmailManifests(req, res, next) {
   try {
-    const limit = parseInt(req.query.limit || '15', 10);
-    const result = await emailService.fetchDepartureEmails({ limit });
+    const limit = parseInt(req.query.limit || '50', 10);
+    const force = req.query.force === 'true';
+    const result = await emailService.fetchDepartureEmails({ limit, force });
     return res.status(200).json({
       success: true,
       ...result,

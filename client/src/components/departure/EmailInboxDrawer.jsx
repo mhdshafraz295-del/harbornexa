@@ -49,12 +49,14 @@ export const EmailInboxDrawer = ({
   const [expandedEmailId, setExpandedEmailId] = useState(null);
   const [showSetupGuide, setShowSetupGuide] = useState(false);
   const [addedIds, setAddedIds] = useState(new Set());
+  const [fetchLimit, setFetchLimit] = useState(50);
 
-  const fetchEmails = async () => {
+  const fetchEmails = async (isForce = false, limitOverride = null) => {
     try {
       setIsLoading(true);
       setStatusMessage('');
-      const data = await getEmailManifests(25);
+      const targetLimit = limitOverride || fetchLimit;
+      const data = await getEmailManifests(targetLimit, isForce);
       setEmails(data.emails || []);
       setIsConfigured(Boolean(data.configured));
       if (data.message) {
@@ -282,7 +284,25 @@ export const EmailInboxDrawer = ({
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2 self-end sm:self-auto">
+        <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+          {/* Email Limit Dropdown */}
+          <select
+            value={fetchLimit}
+            onChange={(e) => {
+              const newLimit = parseInt(e.target.value, 10);
+              setFetchLimit(newLimit);
+              fetchEmails(true, newLimit);
+            }}
+            disabled={isLoading || isProcessingParent}
+            className="px-2.5 py-1.5 rounded-xl border border-[#E5E7EB] hover:bg-[#F5F6F8] text-[#111827] text-xs font-bold transition-colors cursor-pointer bg-white"
+            title="Number of emails to load"
+          >
+            <option value="25">25 Mails</option>
+            <option value="50">50 Mails (Default)</option>
+            <option value="75">75 Mails</option>
+            <option value="100">100 Mails</option>
+          </select>
+
           <button
             onClick={() => setShowSetupGuide(!showSetupGuide)}
             type="button"
@@ -298,7 +318,7 @@ export const EmailInboxDrawer = ({
           </button>
 
           <button
-            onClick={fetchEmails}
+            onClick={() => fetchEmails(true)}
             disabled={isLoading || isProcessingParent}
             title="Refresh Inbox"
             className="p-2 px-3 rounded-xl border border-[#E5E7EB] hover:bg-[#F5F6F8] text-[#64748B] hover:text-[#111827] text-xs font-bold transition-all duration-150 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
