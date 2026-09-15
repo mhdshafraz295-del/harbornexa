@@ -25,7 +25,7 @@ export const FALLBACK_EMAILS = [
     from: 'no-reply@accounts.google.com',
     fromName: 'Google',
     date: new Date().toISOString(),
-    preview: '2-Step Verification turned on sfn1825@gmail.com Your Google Account is now protected.',
+    preview: '2-Step Verification turned on alsafafisheriesorg@gmail.com Your Google Account is now protected.',
     hasPdf: false,
     attachments: [],
   },
@@ -127,7 +127,7 @@ export const FALLBACK_EMAILS = [
     from: 'no-reply@accounts.google.com',
     fromName: 'Google Accounts',
     date: '2026-09-05T18:22:00.000Z',
-    preview: 'Keep track of your Google Account data sfn1825@gmail.com connected to third-party services.',
+    preview: 'Keep track of your Google Account data alsafafisheriesorg@gmail.com connected to third-party services.',
     hasPdf: false,
     attachments: [],
   },
@@ -137,7 +137,7 @@ export const FALLBACK_EMAILS = [
     from: 'no-reply@accounts.google.com',
     fromName: 'Google Accounts',
     date: '2026-09-05T17:15:00.000Z',
-    preview: 'Keep track of your Google Account data sfn1825@gmail.com connected to KLINGAI.',
+    preview: 'Keep track of your Google Account data alsafafisheriesorg@gmail.com connected to KLINGAI.',
     hasPdf: false,
     attachments: [],
   },
@@ -157,7 +157,7 @@ export const FALLBACK_EMAILS = [
     from: 'no-reply@accounts.google.com',
     fromName: 'Google Accounts',
     date: '2026-09-05T14:30:00.000Z',
-    preview: 'Keep track of your Google Account data sfn1825@gmail.com connected to Runway.',
+    preview: 'Keep track of your Google Account data alsafafisheriesorg@gmail.com connected to Runway.',
     hasPdf: false,
     attachments: [],
   },
@@ -167,7 +167,7 @@ export const FALLBACK_EMAILS = [
     from: 'noreply@github.com',
     fromName: 'GitHub',
     date: '2026-09-05T11:05:00.000Z',
-    preview: 'Hey sfn1825-community, an OAuth application was recently authorized to access your GitHub account.',
+    preview: 'Hey alsafafisheries-community, an OAuth application was recently authorized to access your GitHub account.',
     hasPdf: false,
     attachments: [],
   },
@@ -216,7 +216,7 @@ export const getEmailManifests = async (limit = 20) => {
       success: true,
       configured: false,
       emails: FALLBACK_EMAILS,
-      message: 'Showing mailbox messages for sfn1825@gmail.com.',
+      message: 'Showing mailbox messages for alsafafisheriesorg@gmail.com.',
     };
   } catch (err) {
     console.warn('Backend email API not available on current server; using mailbox view:', err.message);
@@ -224,7 +224,7 @@ export const getEmailManifests = async (limit = 20) => {
       success: true,
       configured: false,
       emails: FALLBACK_EMAILS,
-      message: 'Showing mailbox messages for sfn1825@gmail.com.',
+      message: 'Showing mailbox messages for alsafafisheriesorg@gmail.com.',
     };
   }
 };

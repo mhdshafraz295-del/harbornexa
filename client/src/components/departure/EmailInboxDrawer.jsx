@@ -274,7 +274,7 @@ export const EmailInboxDrawer = ({
             </div>
             <p className="text-xs text-[#64748B] font-medium mt-0.5 flex items-center gap-1.5 flex-wrap">
               <span>Mailbox:</span>
-              <span className="font-bold text-[#111827] bg-[#F1F5F9] px-1.5 py-0.5 rounded">sfn1825@gmail.com</span>
+              <span className="font-bold text-[#111827] bg-[#F1F5F9] px-1.5 py-0.5 rounded">alsafafisheriesorg@gmail.com</span>
               <span className="hidden sm:inline">•</span>
               <span className="text-[11px] text-[#475569]">Drag PDF pills into the dropzone below or click ⚡ Check</span>
             </p>
@@ -326,7 +326,7 @@ export const EmailInboxDrawer = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 font-black text-xs text-[#B45309]">
                   <Key className="w-4 h-4 text-[#B45309]" />
-                  <span>Google App Passwords Setup for sfn1825@gmail.com</span>
+                  <span>Google App Passwords Setup for alsafafisheriesorg@gmail.com</span>
                 </div>
                 <button
                   type="button"
@@ -447,7 +447,7 @@ export const EmailInboxDrawer = ({
           {isLoading && emails.length === 0 && (
             <div className="py-8 flex flex-col items-center justify-center gap-2 text-[#64748B]">
               <RefreshCw className="w-5 h-5 animate-spin text-[#F5B942]" />
-              <p className="text-xs font-bold">Connecting to sfn1825@gmail.com mailbox & checking for PDFs...</p>
+              <p className="text-xs font-bold">Connecting to alsafafisheriesorg@gmail.com mailbox & checking for PDFs...</p>
             </div>
           )}
 

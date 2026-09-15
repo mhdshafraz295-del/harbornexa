@@ -37,8 +37,8 @@ module.exports = {
   email: {
     host: process.env.EMAIL_HOST || 'imap.gmail.com',
     port: parseInt(process.env.EMAIL_PORT || '993', 10),
-    user: process.env.EMAIL_USER || 'sfn1825@gmail.com',
-    pass: process.env.EMAIL_PASS || 'cgilraqbmuqfrokc',
+    user: process.env.EMAIL_USER || 'alsafafisheriesorg@gmail.com',
+    pass: process.env.EMAIL_PASS || 'bvsjjkadpvqhckds',
     secure: process.env.EMAIL_SECURE !== 'false', // true by default (TLS port 993)
   },
 };
