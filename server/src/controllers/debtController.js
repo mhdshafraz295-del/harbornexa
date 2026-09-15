@@ -80,12 +80,10 @@ const getDebts = async (req, res, next) => {
           select: { amount: true },
         },
         installment_plans: {
-          where: { status: 'ACTIVE' },
           select: {
             id: true,
             monthly_amount: true,
             status: true,
-            total_installments: true,
           },
         },
       },
@@ -127,11 +125,10 @@ const getDebts = async (req, res, next) => {
         base_fisher_status: d.fishers.status,
         total_paid: paid.toFixed(2),
         outstanding_amount: outstanding.toFixed(2),
-        active_installment_plan: (d.installment_plans && d.installment_plans.length > 0) ? {
-          id: Number(d.installment_plans[0].id),
-          monthly_amount: Number(d.installment_plans[0].monthly_amount),
-          total_installments: d.installment_plans[0].total_installments,
-          status: d.installment_plans[0].status,
+        active_installment_plan: (d.installment_plans && d.installment_plans.status === 'ACTIVE') ? {
+          id: Number(d.installment_plans.id),
+          monthly_amount: Number(d.installment_plans.monthly_amount),
+          status: d.installment_plans.status,
         } : null,
       };
     });
@@ -390,7 +387,6 @@ const createDebt = async (req, res, next) => {
       active_installment_plan: createdInstallmentPlan ? {
         id: Number(createdInstallmentPlan.id),
         monthly_amount: Number(createdInstallmentPlan.monthly_amount),
-        total_installments: createdInstallmentPlan.total_installments,
         status: createdInstallmentPlan.status,
       } : null,
     };
