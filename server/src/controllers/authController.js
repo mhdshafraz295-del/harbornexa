@@ -169,8 +169,80 @@ const logout = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/auth/create-admin
+ */
+const createAdminAccount = async (req, res, next) => {
+  const ipAddress = req.ip || req.connection?.remoteAddress || null;
+  const userAgent = req.get('user-agent') || null;
+
+  try {
+    const { name, email, password } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, email, and password are required.',
+      });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 8 characters long.',
+      });
+    }
+
+    const emailNorm = email.trim().toLowerCase();
+    const existing = await prisma.admins.findUnique({
+      where: { email: emailNorm },
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: `An admin account with email "${emailNorm}" already exists.`,
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const newAdmin = await prisma.admins.create({
+      data: {
+        name: name.trim(),
+        email: emailNorm,
+        password_hash: passwordHash,
+        role: 'ADMIN',
+        status: 'ACTIVE',
+      },
+    });
+
+    await logAudit({
+      adminId: req.admin?.id,
+      action: 'ADMIN_CREATED',
+      ipAddress,
+      userAgent,
+      metadata: { newAdminId: newAdmin.id, newAdminEmail: newAdmin.email },
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: `Admin account "${newAdmin.email}" created successfully.`,
+      admin: {
+        id: newAdmin.id,
+        name: newAdmin.name,
+        email: newAdmin.email,
+        role: newAdmin.role,
+        status: newAdmin.status,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   login,
   getMe,
   logout,
+  createAdminAccount,
 };
