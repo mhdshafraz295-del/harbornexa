@@ -1030,18 +1030,15 @@ export const BlockHistoryPage = () => {
                 <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
                   <div className="flex items-center gap-2 mb-2">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span className="text-xs font-extrabold text-emerald-700">Block வெற்றிகரமாக செய்யப்பட்டது!</span>
+                    <span className="text-xs font-extrabold text-emerald-700">Boat Block வெற்றிகரமாக செய்யப்பட்டது!</span>
                   </div>
                   <div className="space-y-1 text-[11px] text-emerald-800">
-                    <div><span className="font-bold">பெயர்:</span> {boatBlockResult.fisher?.full_name}</div>
-                    <div><span className="font-bold">Boat No:</span> {boatBlockResult.fisher?.boat_no}</div>
-                    <div><span className="font-bold">NIC:</span> {boatBlockResult.fisher?.nic}</div>
-                    <div><span className="font-bold">Fisher ID:</span> {boatBlockResult.fisher?.fisher_id}</div>
-                    {boatBlockResult.fisher?.hadExistingActiveHold && (
-                      <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-700 font-bold">
-                        ⚠️ இந்த boat-க்கு ஏற்கனவே active block இருந்தது. புதிய block-ம் சேர்க்கப்பட்டது.
-                      </div>
-                    )}
+                    <div><span className="font-bold">Boat No:</span> {boatBlockResult.boatNo || boatBlockResult.fisher?.boat_no}</div>
+                    {boatBlockResult.fisher?.full_name && <div><span className="font-bold">பெயர்:</span> {boatBlockResult.fisher?.full_name}</div>}
+                    {boatBlockResult.fisher?.nic && <div><span className="font-bold">NIC:</span> {boatBlockResult.fisher?.nic}</div>}
+                    <div className="mt-2 p-2 bg-emerald-100 border border-emerald-200 rounded-lg text-emerald-900 font-bold">
+                      🚢 இனி இந்த boat number departure PDF-ல் வந்தால் automatically ⛔ BLOCKED BOAT என்று காட்டும்.
+                    </div>
                   </div>
                   <button
                     onClick={() => { setBoatBlockModalOpen(false); setBoatBlockResult(null); }}

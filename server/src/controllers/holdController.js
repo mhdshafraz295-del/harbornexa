@@ -570,96 +570,94 @@ const blockByNic = async (req, res, next) => {
 
 /**
  * POST /api/holds/block-by-boat
- * Block a fisher by Boat Number — any owner/admin can block a person
- * by boat number even if they didn't register that fisher.
+ * Block a boat number DIRECTLY — no fisher record needed.
+ * Stored in settings table as a boat block list.
+ * PDF departure checker will check against this list.
  */
 const blockByBoat = async (req, res, next) => {
   try {
-    const { boatNo, notes, reasonText } = req.body;
+    const { boatNo, notes } = req.body;
 
     if (!boatNo || !boatNo.trim()) {
       return res.status(400).json({ success: false, message: 'Boat number is required.' });
     }
 
-    const trimmedBoatNo = boatNo.trim();
+    const trimmedBoatNo = boatNo.trim().toUpperCase();
 
-    // Find fisher by boat_no (case-insensitive)
-    const fisher = await prisma.fishers.findFirst({
-      where: {
-        boat_no: { contains: trimmedBoatNo },
-        is_archived: false,
-      },
-      select: { id: true, fisher_id: true, full_name: true, nic: true, boat_no: true, status: true },
-    });
+    // Load existing blocked boats from settings table
+    const settingKey = 'blocked_boats_list';
+    const existing = await prisma.settings.findUnique({ where: { setting_key: settingKey } });
+    let blockedBoats = [];
+    try {
+      blockedBoats = existing ? JSON.parse(existing.setting_value || '[]') : [];
+    } catch (_) {
+      blockedBoats = [];
+    }
 
-    if (!fisher) {
-      return res.status(404).json({
-        success: false,
-        message: `Boat No "${trimmedBoatNo}" க்கு எந்த fisher-உம் கிடைக்கவில்லை. Boat number சரியாக இருக்கிறதா என்று பாருங்கள்.`,
+    // Check if already blocked
+    const alreadyBlocked = blockedBoats.find((b) => b.boat_no === trimmedBoatNo && !b.released_at);
+
+    // Add new block entry
+    const newEntry = {
+      boat_no: trimmedBoatNo,
+      notes: notes ? notes.trim() : null,
+      blocked_at: new Date().toISOString(),
+      blocked_by_admin_id: req.admin?.id || 1,
+      released_at: null,
+    };
+    blockedBoats.push(newEntry);
+
+    // Save back to settings
+    if (existing) {
+      await prisma.settings.update({
+        where: { setting_key: settingKey },
+        data: { setting_value: JSON.stringify(blockedBoats), updated_at: new Date() },
+      });
+    } else {
+      await prisma.settings.create({
+        data: { setting_key: settingKey, setting_value: JSON.stringify(blockedBoats) },
       });
     }
 
-    // Check if already has an active NIC/Boat block hold
-    const existingActiveHold = await prisma.fisher_holds.findFirst({
-      where: {
-        fisher_id: fisher.id,
-        released_at: null,
-        reason_code: 'MANAGEMENT_DECISION',
-        reason_text: { contains: 'Boat Block' },
-      },
-    });
-
-    // Create hold in transaction
-    const createdHold = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM fishers WHERE id = ${fisher.id} FOR UPDATE`;
-
-      return await tx.fisher_holds.create({
-        data: {
-          fisher_id: fisher.id,
-          reason_code: 'MANAGEMENT_DECISION',
-          reason_text: reasonText ? reasonText.trim() : `Boat Block – ${trimmedBoatNo}`,
-          notes: notes ? notes.trim() : null,
-          hold_date: new Date(),
-          created_by_admin_id: req.admin?.id || 1,
-        },
-      });
-    });
-
     await logAudit({
       adminId: req.admin?.id || null,
-      action: 'BOAT_GLOBAL_BLOCK',
+      action: 'BOAT_DIRECT_BLOCK',
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
       metadata: {
-        holdId: Number(createdHold.id),
-        fisherId: Number(fisher.id),
-        customFisherId: fisher.fisher_id,
-        fisherName: fisher.full_name,
         boatNo: trimmedBoatNo,
-        hadExistingActiveHold: !!existingActiveHold,
+        notes: notes || null,
+        alreadyBlockedBefore: !!alreadyBlocked,
       },
     });
 
     return res.status(201).json({
       success: true,
-      message: `"${fisher.full_name}" (Boat: ${fisher.boat_no}) வெற்றிகரமாக block செய்யப்பட்டார்.`,
-      fisher: {
-        id: Number(fisher.id),
-        fisher_id: fisher.fisher_id,
-        full_name: fisher.full_name,
-        nic: fisher.nic,
-        boat_no: fisher.boat_no,
-        status: fisher.status,
-        hadExistingActiveHold: !!existingActiveHold,
-      },
-      hold: {
-        id: Number(createdHold.id),
-        fisher_id: Number(createdHold.fisher_id),
-        reason_code: createdHold.reason_code,
-        reason_text: createdHold.reason_text,
-        hold_date: createdHold.hold_date,
-      },
+      message: `Boat "${trimmedBoatNo}" வெற்றிகரமாக block செய்யப்பட்டது! இனி இந்த boat departure PDF-ல் வந்தால் BLOCKED காட்டும்.`,
+      boatNo: trimmedBoatNo,
+      alreadyBlockedBefore: !!alreadyBlocked,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/holds/blocked-boats
+ * Returns all active (not released) blocked boat numbers
+ */
+const getBlockedBoats = async (req, res, next) => {
+  try {
+    const settingKey = 'blocked_boats_list';
+    const existing = await prisma.settings.findUnique({ where: { setting_key: settingKey } });
+    let blockedBoats = [];
+    try {
+      blockedBoats = existing ? JSON.parse(existing.setting_value || '[]') : [];
+    } catch (_) {
+      blockedBoats = [];
+    }
+    const active = blockedBoats.filter((b) => !b.released_at);
+    return res.status(200).json({ success: true, blockedBoats: active });
   } catch (error) {
     next(error);
   }

@@ -523,10 +523,21 @@ const checkDeparturePdfs = async (req, res, next) => {
           status: true,
         },
       });
-      boatFishers.forEach((f) => {
+      boatFisherMap.forEach((f) => {
         if (f.boat_no) boatFisherMap.set(f.boat_no.toUpperCase(), f);
       });
     }
+
+    // Load directly blocked boats list from settings (no fisher record needed)
+    const blockedBoatsSetting = await prisma.settings.findUnique({ where: { setting_key: 'blocked_boats_list' } });
+    let directBlockedBoats = [];
+    try {
+      directBlockedBoats = blockedBoatsSetting ? JSON.parse(blockedBoatsSetting.setting_value || '[]') : [];
+    } catch (_) { directBlockedBoats = []; }
+    // Only active (not released) blocks
+    const activeDirectBoatBlocks = new Set(
+      directBlockedBoats.filter((b) => !b.released_at).map((b) => b.boat_no.toUpperCase())
+    );
 
     // Cache clearance results for unique Fishers (NIC + Boat) + fetch active holds for block reasons
     const clearanceCache = new Map(); // keyed by fisher.id (BigInt)
@@ -626,15 +637,36 @@ const checkDeparturePdfs = async (req, res, next) => {
       if (fileData.extractedBoatNos && fileData.extractedBoatNos.length > 0) {
         for (const rawBoat of fileData.extractedBoatNos) {
           const normalizedBoat = rawBoat.trim().toUpperCase();
+
+          // 1. Check direct boat blocks list first (no fisher record needed)
+          if (activeDirectBoatBlocks.has(normalizedBoat)) {
+            totalBlc++;
+            totalNicsExtracted++;
+            results.push({
+              nic: '—',
+              fisherId: null,
+              fisherName: '—',
+              boatNo: normalizedBoat,
+              status: 'BLC',
+              outcome: 'BLC',
+              canProceed: false,
+              details: `⛔ BLOCKED BOAT – ${normalizedBoat}`,
+              reasons: [],
+              blockReasons: [{ type: 'BOAT_BLOCK', label: `Boat Block – ${normalizedBoat}` }],
+              detectedBy: 'DIRECT_BOAT_BLOCK',
+            });
+            continue;
+          }
+
+          // 2. Check fisher-linked boat blocks
           const boatFisher = boatFisherMap.get(normalizedBoat);
           if (!boatFisher) continue;
-          if (nicResultSet.has(boatFisher.fisher_id)) continue; // already in NIC results
+          if (nicResultSet.has(boatFisher.fisher_id)) continue;
 
           const cached = clearanceCache.get(String(boatFisher.id));
           if (!cached) continue;
           const outcome = cached.outcome;
 
-          // Only add to results if fisher is BLOCKED — so we don't duplicate approved ones
           if (outcome === 'BLC') {
             totalBlc++;
             totalNicsExtracted++;
