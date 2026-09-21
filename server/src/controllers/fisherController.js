@@ -205,61 +205,7 @@ const createFisher = async (req, res, next) => {
       ? status.toUpperCase()
       : 'ACTIVE';
 
-    // 5. Check duplicate NIC in DB first via Prisma
-    const existingNic = await prisma.fishers.findUnique({
-      where: { nic: normalizedNic },
-      select: { id: true, fisher_id: true, full_name: true, status: true, boat_no: true, phone: true },
-    });
-    if (existingNic) {
-      if (validStatus === 'BLOCKED') {
-        // If status is BLOCKED, automatically add a new manual block/hold for this existing fisher
-        // WITHOUT overwriting original fisher details (boat_no, phone, address)!
-        const createdHold = await prisma.fisher_holds.create({
-          data: {
-            fisher_id: existingNic.id,
-            reason_code: 'MANAGEMENT_DECISION',
-            reason_text: boat_no ? `Manual Block – Boat: ${boat_no.trim()}` : (notes ? `Manual Block – ${notes.trim()}` : 'Admin Block'),
-            notes: notes ? notes.trim() : (boat_no ? `Boat: ${boat_no.trim()}` : null),
-            hold_date: new Date(),
-            created_by_admin_id: req.admin?.id || 1,
-          },
-        });
-
-        // Update ONLY status to BLOCKED if not already BLOCKED, preserving existing fisher details intact
-        const updatedFisher = await prisma.fishers.update({
-          where: { id: existingNic.id },
-          data: { status: 'BLOCKED' },
-        });
-
-        await logAudit({
-          adminId: req.admin?.id || null,
-          action: 'FISHER_BLOCKED_EXISTING',
-          ipAddress: req.ip,
-          userAgent: req.get('user-agent'),
-          metadata: {
-            id: Number(existingNic.id),
-            fisherId: existingNic.fisher_id,
-            fullName: existingNic.full_name,
-            nic: normalizedNic,
-            holdId: Number(createdHold.id),
-            blockBoatNo: boat_no ? boat_no.trim() : null,
-          },
-        });
-
-        return res.status(200).json({
-          success: true,
-          message: `"${existingNic.full_name}" (NIC: ${normalizedNic}) கணக்கில் புதிய Block வெற்றிகரமாக பதிவு செய்யப்பட்டது! பழைய விவரங்கள் மாற்றப்படவில்லை.`,
-          fisher: mapFisherResponse(updatedFisher),
-        });
-      }
-
-      return res.status(409).json({
-        success: false,
-        message: 'A fisher with this NIC already exists.',
-      });
-    }
-
-    // 6. Transaction-safe Fisher ID sequence generation via Prisma $transaction
+    // 5. Transaction-safe Fisher ID sequence generation via Prisma $transaction
     const newFisher = await prisma.$transaction(async (tx) => {
       // Lock sequence row for transaction safety
       const seqRows = await tx.$queryRaw`
@@ -280,8 +226,8 @@ const createFisher = async (req, res, next) => {
 
       const formattedFisherId = `FIS-${String(nextVal).padStart(6, '0')}`;
 
-      // Insert Fisher with generated fisher_id directly
-      return await tx.fishers.create({
+      // Insert new Fisher record for this boat / block entry
+      const created = await tx.fishers.create({
         data: {
           fisher_id: formattedFisherId,
           full_name: full_name.trim(),
@@ -294,6 +240,22 @@ const createFisher = async (req, res, next) => {
           created_by_admin_id: req.admin?.id || null,
         },
       });
+
+      // If status is BLOCKED, also create a hold record for block history tracking
+      if (validStatus === 'BLOCKED') {
+        await tx.fisher_holds.create({
+          data: {
+            fisher_id: created.id,
+            reason_code: 'MANAGEMENT_DECISION',
+            reason_text: boat_no ? `Manual Block – Boat: ${boat_no.trim()}` : (notes ? `Manual Block – ${notes.trim()}` : 'Admin Block'),
+            notes: notes ? notes.trim() : (boat_no ? `Boat: ${boat_no.trim()}` : null),
+            hold_date: new Date(),
+            created_by_admin_id: req.admin?.id || 1,
+          },
+        });
+      }
+
+      return created;
     });
 
     const newFisherMapped = mapFisherResponse(newFisher);

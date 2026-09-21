@@ -88,11 +88,26 @@ async function ensureDefaultAdmins() {
   }
 }
 
+/**
+ * Ensures unique index `nic` on `fishers` table is dropped so multiple boat/owner block entries can exist per NIC
+ */
+async function ensureNicIndexDropped() {
+  try {
+    await prisma.$executeRawUnsafe('ALTER TABLE fishers DROP INDEX nic');
+    console.log('✔ Unique index `nic` dropped from fishers table to allow multiple boat block entries.');
+  } catch (err) {
+    // Index already dropped or not present
+  }
+}
+
 async function startServer() {
   try {
     // Verify DB Connection via Prisma Engine
     await prisma.$queryRaw`SELECT 1 + 1 AS result`;
     console.log('✔ Prisma Database Engine connected successfully.');
+
+    // Ensure nic index is dropped
+    await ensureNicIndexDropped();
 
     // Ensure assafa admin account is created and active
     await ensureDefaultAdmins();
