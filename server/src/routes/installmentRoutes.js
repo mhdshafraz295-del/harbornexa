@@ -7,6 +7,7 @@ const {
   listInstallmentPlans,
   handleCreatePlan,
   handleCancelPlan,
+  handleDeletePlan,
 } = require('../controllers/installmentController');
 
 // All routes require authentication
@@ -26,6 +27,9 @@ router.post('/plans', handleCreatePlan);
 
 // POST /api/installments/plans/:id/cancel
 router.post('/plans/:id/cancel', handleCancelPlan);
+
+// DELETE /api/installments/plans/:id
+router.delete('/plans/:id', handleDeletePlan);
 
 module.exports = router;
 

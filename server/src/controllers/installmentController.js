@@ -272,7 +272,43 @@ async function handleCancelPlan(req, res) {
     });
   } catch (error) {
     console.error('Error cancelling installment plan:', error);
-    return res.status(400).json({ success: false, error: error.message });
+/**
+ * DELETE /api/installments/plans/:id
+ * Permanently delete an installment plan and its associated dues.
+ */
+async function handleDeletePlan(req, res) {
+  try {
+    const planId = req.params.id;
+    if (!planId) {
+      return res.status(400).json({ success: false, error: 'Plan ID is required.' });
+    }
+    const planIdBig = BigInt(planId);
+
+    const existingPlan = await prisma.installment_plans.findUnique({
+      where: { id: planIdBig },
+    });
+
+    if (!existingPlan) {
+      return res.status(404).json({ success: false, error: 'Installment plan not found.' });
+    }
+
+    // Delete associated dues and plan
+    await prisma.$transaction(async (tx) => {
+      await tx.installment_dues.deleteMany({
+        where: { plan_id: planIdBig },
+      });
+      await tx.installment_plans.delete({
+        where: { id: planIdBig },
+      });
+    });
+
+    return res.json({
+      success: true,
+      message: 'Installment plan deleted successfully.',
+    });
+  } catch (error) {
+    console.error('Error deleting installment plan:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 }
 
@@ -282,4 +318,5 @@ module.exports = {
   listInstallmentPlans,
   handleCreatePlan,
   handleCancelPlan,
+  handleDeletePlan,
 };

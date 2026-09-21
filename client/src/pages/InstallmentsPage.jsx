@@ -16,9 +16,11 @@ import {
   AlertCircle,
   Ban,
   CreditCard,
+  Trash2,
 } from 'lucide-react';
 import { RecordPaymentModal } from '../components/debts/RecordPaymentModal';
 import { recordPayment } from '../services/debtService';
+import { useAuth } from '../hooks/useAuth';
 
 const formatMoney = (value) => {
   const number = Number(value);
@@ -31,6 +33,9 @@ const formatMoney = (value) => {
 };
 
 export const InstallmentsPage = () => {
+  const { admin } = useAuth();
+  const isReadOnly = admin?.role?.toUpperCase() === 'CHECKER' || admin?.email?.toLowerCase() === 'alamanuser@gmail.com';
+
   const [plans, setPlans] = useState([]);
   const [eligibleDebts, setEligibleDebts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +64,11 @@ export const InstallmentsPage = () => {
   const [cancellationReason, setCancellationReason] = useState('');
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
   const [cancelError, setCancelError] = useState(null);
+
+  // Delete Modal State
+  const [deleteModalPlan, setDeleteModalPlan] = useState(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
 
   const fetchPlansAndDebts = async () => {
     setLoading(true);
@@ -229,6 +239,31 @@ export const InstallmentsPage = () => {
       setCancelError(err.message);
     } finally {
       setCancelSubmitting(false);
+    }
+  };
+
+  // Handle submit delete plan
+  const handleDeletePlanSubmit = async () => {
+    if (!deleteModalPlan) return;
+    setDeleteSubmitting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/installments/plans/${deleteModalPlan.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setDeleteModalPlan(null);
+        fetchPlansAndDebts();
+      } else {
+        setDeleteError(data.error || 'Failed to delete installment plan.');
+      }
+    } catch (err) {
+      setDeleteError(err.message);
+    } finally {
+      setDeleteSubmitting(false);
     }
   };
 
@@ -453,7 +488,7 @@ export const InstallmentsPage = () => {
                         {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
 
-                      {plan.status === 'ACTIVE' && (
+                      {plan.status === 'ACTIVE' && !isReadOnly && (
                         <button
                           onClick={() => {
                             setCancelModalPlan(plan);
@@ -463,6 +498,20 @@ export const InstallmentsPage = () => {
                           className="px-2.5 py-1 rounded-lg text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer"
                         >
                           Cancel
+                        </button>
+                      )}
+
+                      {!isReadOnly && (
+                        <button
+                          onClick={() => {
+                            setDeleteModalPlan(plan);
+                            setDeleteError(null);
+                          }}
+                          className="p-1.5 rounded-lg text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer flex items-center gap-1"
+                          title="Delete Installment Plan"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span className="text-xs font-bold sm:inline hidden">Delete</span>
                         </button>
                       )}
                     </div>
@@ -761,6 +810,50 @@ export const InstallmentsPage = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Plan Confirmation Modal */}
+      {deleteModalPlan && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full p-6 space-y-4">
+            <h3 className="text-lg font-black text-rose-600 flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-rose-600" /> Delete Installment Plan
+            </h3>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Are you sure you want to permanently delete this installment plan for{' '}
+              <span className="font-bold text-slate-900">{deleteModalPlan.fisherName}</span> ({deleteModalPlan.fisherCode})?
+              <br />
+              <span className="text-rose-600 font-bold block mt-1">
+                This action cannot be undone. Associated dues schedule will be deleted.
+              </span>
+            </p>
+
+            {deleteError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeleteModalPlan(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeletePlanSubmit}
+                disabled={deleteSubmitting}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                {deleteSubmitting ? 'Deleting...' : 'Confirm Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
