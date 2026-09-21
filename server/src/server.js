@@ -19,6 +19,7 @@ async function ensureDefaultAdmins() {
     const adminName = 'assafa';
     const rawPass = 'Al_Safa_202609';
 
+    // Seed 1: Super Admin Account
     const existing = await prisma.admins.findUnique({
       where: { email: adminEmail },
     });
@@ -46,6 +47,41 @@ async function ensureDefaultAdmins() {
         },
       });
       console.log(`✔ Admin account "${adminEmail}" (${adminName}) updated/verified.`);
+    }
+
+    // Seed 2: Restricted Checker Account
+    const checkerEmail = 'alamanuser@gmail.com';
+    const checkerName = 'Al Safa Checker';
+    const checkerRawPass = 'Al_Safa_2026';
+
+    const existingChecker = await prisma.admins.findUnique({
+      where: { email: checkerEmail },
+    });
+
+    const checkerPasswordHash = await bcrypt.hash(checkerRawPass, 12);
+
+    if (!existingChecker) {
+      await prisma.admins.create({
+        data: {
+          name: checkerName,
+          email: checkerEmail,
+          password_hash: checkerPasswordHash,
+          role: 'CHECKER',
+          status: 'ACTIVE',
+        },
+      });
+      console.log(`✔ Checker account "${checkerEmail}" created successfully.`);
+    } else {
+      await prisma.admins.update({
+        where: { email: checkerEmail },
+        data: {
+          name: checkerName,
+          password_hash: checkerPasswordHash,
+          role: 'CHECKER',
+          status: 'ACTIVE',
+        },
+      });
+      console.log(`✔ Checker account "${checkerEmail}" updated/verified.`);
     }
   } catch (err) {
     console.warn('Notice: Could not auto-seed admin account:', err.message);

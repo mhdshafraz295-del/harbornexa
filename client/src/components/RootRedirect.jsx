@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { Anchor } from 'lucide-react';
 
 export const RootRedirect = () => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, admin } = useAuth();
 
   if (loading) {
     return (
@@ -21,6 +21,9 @@ export const RootRedirect = () => {
   }
 
   if (isAuthenticated) {
+    if (admin?.role === 'CHECKER') {
+      return <Navigate to="/admin/departure-pdf-checker" replace />;
+    }
     return <Navigate to="/admin/dashboard" replace />;
   }
 

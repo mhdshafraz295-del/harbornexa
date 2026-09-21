@@ -65,7 +65,21 @@ export const AdminLayout = () => {
     navigate('/login', { replace: true });
   };
 
-  const navItems = [
+  const isChecker = admin?.role === 'CHECKER';
+  const checkerAllowedPaths = ['/admin/departure-pdf-checker', '/admin/departure-checker', '/admin/clearance', '/admin/block-history'];
+
+  // Protect routes for CHECKER role: redirect away from forbidden pages to Departure PDF Checker
+  useEffect(() => {
+    if (isChecker) {
+      const currentPath = location.pathname;
+      const isAllowed = checkerAllowedPaths.some((p) => currentPath.startsWith(p));
+      if (!isAllowed) {
+        navigate('/admin/departure-pdf-checker', { replace: true });
+      }
+    }
+  }, [isChecker, location.pathname, navigate]);
+
+  const allNavItems = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'Fishers', path: '/admin/fishers', icon: Users },
     { name: 'QR Scanner', path: '/admin/qr-scanner', icon: QrCode },
@@ -77,6 +91,10 @@ export const AdminLayout = () => {
     { name: 'Import / Export', path: '/admin/import-export', icon: FileSpreadsheet },
     { name: 'Settings', path: '/admin/settings', icon: Settings },
   ];
+
+  const navItems = isChecker
+    ? allNavItems.filter((item) => checkerAllowedPaths.includes(item.path))
+    : allNavItems;
 
   // Current formatted date string
   const currentDate = new Date().toLocaleDateString('en-GB', {

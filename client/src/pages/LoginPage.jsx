@@ -38,8 +38,12 @@ export const LoginPage = () => {
 
     try {
       setIsSubmitting(true);
-      await loginUser(email, password);
-      navigate('/admin/dashboard', { replace: true });
+      const loggedInAdmin = await loginUser(email, password);
+      if (loggedInAdmin?.role === 'CHECKER') {
+        navigate('/admin/departure-pdf-checker', { replace: true });
+      } else {
+        navigate('/admin/dashboard', { replace: true });
+      }
     } catch (err) {
       setErrorMsg(err.message || 'Invalid email or password.');
     } finally {
