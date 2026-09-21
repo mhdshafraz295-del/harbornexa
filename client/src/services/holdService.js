@@ -24,3 +24,8 @@ export const blockFisherByNic = async (nic, notes) => {
   const response = await api.post('/holds/block-by-nic', { nic, notes });
   return response.data;
 };
+
+export const blockFisherByBoat = async (boatNo, notes) => {
+  const response = await api.post('/holds/block-by-boat', { boatNo, notes });
+  return response.data;
+};

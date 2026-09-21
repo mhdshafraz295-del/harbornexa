@@ -300,17 +300,21 @@ export const DepartureCheckerPage = () => {
         const isApproved = r.status === 'APPROVED' || r.outcome === 'APPROVED';
         const isBlc = r.status === 'BLC' || r.outcome === 'BLC';
         const badgeColor = isApproved ? '#059669' : isBlc ? '#DC2626' : '#D97706';
-        const badgeText = isApproved ? 'APPROVED' : isBlc ? 'BLC HOLD' : 'NOT FOUND';
+        const badgeText = isApproved ? 'APPROVED' : isBlc ? '⛔ BLC HOLD' : 'NOT FOUND';
+        const blockReasonsHtml = isBlc && r.blockReasons && r.blockReasons.length > 0
+          ? r.blockReasons.map(br => `<div style="font-size:9px; color:#991B1B; margin-top:2px;">→ ${br.label}</div>`).join('')
+          : '';
         return `
-          <tr style="border-bottom: 1px solid #E2E8F0;">
+          <tr style="border-bottom: 1px solid #E2E8F0; ${isBlc ? 'background: #FFF5F5;' : ''}">
             <td style="padding: 6px 8px; font-family: monospace;">${r.nic || '—'}</td>
             <td style="padding: 6px 8px;">${r.fisherName || '—'}</td>
             <td style="padding: 6px 8px;">${r.boatNo || '—'}</td>
-            <td style="padding: 6px 8px;"><span style="color: ${badgeColor}; font-weight: 800;">${badgeText}</span></td>
+            <td style="padding: 6px 8px;"><span style="color: ${badgeColor}; font-weight: 800;">${badgeText}</span>${blockReasonsHtml}</td>
             <td style="padding: 6px 8px; font-size: 10px;">${r.details || '—'}</td>
           </tr>
         `;
       }).join('');
+
 
       return `
         <div style="margin-top: 18px; border: 1px solid #CBD5E1; border-radius: 8px; overflow: hidden;">

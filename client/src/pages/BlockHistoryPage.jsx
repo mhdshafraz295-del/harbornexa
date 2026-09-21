@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { getBlockHistory, releaseHold, blockFisherByNic } from '../services/holdService';
+import { getBlockHistory, releaseHold, blockFisherByNic, blockFisherByBoat } from '../services/holdService';
 import { FisherDetailDrawer } from '../components/fishers/FisherDetailDrawer';
 import {
   Ban,
@@ -61,8 +61,16 @@ export const BlockHistoryPage = () => {
   const [nicInput, setNicInput] = useState('');
   const [nicNotes, setNicNotes] = useState('');
   const [nicBlocking, setNicBlocking] = useState(false);
-  const [nicBlockResult, setNicBlockResult] = useState(null); // { success, message, fisher }
+  const [nicBlockResult, setNicBlockResult] = useState(null);
   const [nicBlockError, setNicBlockError] = useState('');
+
+  // Boat Block Modal State
+  const [boatBlockModalOpen, setBoatBlockModalOpen] = useState(false);
+  const [boatInput, setBoatInput] = useState('');
+  const [boatNotes, setBoatNotes] = useState('');
+  const [boatBlocking, setBoatBlocking] = useState(false);
+  const [boatBlockResult, setBoatBlockResult] = useState(null);
+  const [boatBlockError, setBoatBlockError] = useState('');
 
   // Debounce search (300ms)
   useEffect(() => {
@@ -180,6 +188,35 @@ export const BlockHistoryPage = () => {
     }
   };
 
+  const handleOpenBoatBlockModal = () => {
+    setBoatInput('');
+    setBoatNotes('');
+    setBoatBlockResult(null);
+    setBoatBlockError('');
+    setBoatBlockModalOpen(true);
+  };
+
+  const handleBoatBlockSubmit = async (e) => {
+    e.preventDefault();
+    if (!boatInput.trim()) {
+      setBoatBlockError('Boat number enter செய்யவும்.');
+      return;
+    }
+    try {
+      setBoatBlocking(true);
+      setBoatBlockError('');
+      setBoatBlockResult(null);
+      const data = await blockFisherByBoat(boatInput.trim(), boatNotes.trim() || undefined);
+      setBoatBlockResult(data);
+      loadBlockHistoryData();
+    } catch (err) {
+      const msg = err?.response?.data?.message || err.message || 'Block செய்வதில் பிரச்சனை வந்தது.';
+      setBoatBlockError(msg);
+    } finally {
+      setBoatBlocking(false);
+    }
+  };
+
   const filterTabs = [
     { id: 'ACTIVE', label: 'Active Holds', count: metrics.activeManualCount },
     { id: 'HISTORY', label: 'Hold History', count: metrics.historyCount },
@@ -241,6 +278,13 @@ export const BlockHistoryPage = () => {
           >
             <Ban className="w-3.5 h-3.5" />
             <span>Block by NIC</span>
+          </button>
+          <button
+            onClick={handleOpenBoatBlockModal}
+            className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+          >
+            <Ship className="w-3.5 h-3.5" />
+            <span>Block by Boat</span>
           </button>
         </div>
       </div>
@@ -945,6 +989,134 @@ export const BlockHistoryPage = () => {
                     >
                       <Ban className="w-3.5 h-3.5" />
                       {nicBlocking ? 'Blocking...' : 'Block செய்'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Boat Block Modal */}
+      {boatBlockModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-[#E5E7EB] overflow-hidden">
+
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] bg-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-slate-700 border border-slate-600">
+                  <Ship className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-extrabold text-white">Boat Number மூலம் Block செய்ய</h2>
+                  <p className="text-[11px] text-slate-300 font-medium">Boat number enter செய்தால் அந்த ஆளை block செய்யலாம்</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setBoatBlockModalOpen(false)}
+                className="p-1.5 hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4 text-slate-300" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+
+              {/* Success Result */}
+              {boatBlockResult && boatBlockResult.success && (
+                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span className="text-xs font-extrabold text-emerald-700">Block வெற்றிகரமாக செய்யப்பட்டது!</span>
+                  </div>
+                  <div className="space-y-1 text-[11px] text-emerald-800">
+                    <div><span className="font-bold">பெயர்:</span> {boatBlockResult.fisher?.full_name}</div>
+                    <div><span className="font-bold">Boat No:</span> {boatBlockResult.fisher?.boat_no}</div>
+                    <div><span className="font-bold">NIC:</span> {boatBlockResult.fisher?.nic}</div>
+                    <div><span className="font-bold">Fisher ID:</span> {boatBlockResult.fisher?.fisher_id}</div>
+                    {boatBlockResult.fisher?.hadExistingActiveHold && (
+                      <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-700 font-bold">
+                        ⚠️ இந்த boat-க்கு ஏற்கனவே active block இருந்தது. புதிய block-ம் சேர்க்கப்பட்டது.
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => { setBoatBlockModalOpen(false); setBoatBlockResult(null); }}
+                    className="mt-3 w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
+
+              {/* Form */}
+              {!boatBlockResult && (
+                <form onSubmit={handleBoatBlockSubmit} className="space-y-4">
+
+                  {/* Error */}
+                  {boatBlockError && (
+                    <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>{boatBlockError}</span>
+                    </div>
+                  )}
+
+                  {/* Boat No Input */}
+                  <div>
+                    <label className="block text-xs font-bold text-[#374151] mb-1.5">
+                      Boat Number <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                        <Ship className="w-4 h-4 text-slate-400" />
+                      </div>
+                      <input
+                        type="text"
+                        value={boatInput}
+                        onChange={(e) => { setBoatInput(e.target.value); setBoatBlockError(''); }}
+                        placeholder="உதாரணம்: BOAT-001 அல்லது SL-123"
+                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#D1D5DB] rounded-xl text-xs text-[#111827] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400"
+                        autoFocus
+                      />
+                    </div>
+                    <p className="text-[10px] text-[#64748B] mt-1">
+                      யாரு register பண்ணாலும் — Boat number மட்டும் போதும், block ஆகும்.
+                    </p>
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <label className="block text-xs font-bold text-[#374151] mb-1.5">
+                      காரணம் / Notes <span className="text-[#64748B] font-normal">(optional)</span>
+                    </label>
+                    <textarea
+                      value={boatNotes}
+                      onChange={(e) => setBoatNotes(e.target.value)}
+                      placeholder="Block செய்வதற்கான காரணம் எழுதவும்..."
+                      rows={3}
+                      className="w-full px-3.5 py-2.5 bg-white border border-[#D1D5DB] rounded-xl text-xs text-[#111827] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400 resize-none"
+                    />
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setBoatBlockModalOpen(false)}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={boatBlocking || !boatInput.trim()}
+                      className="flex items-center gap-2 px-5 py-2 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-extrabold transition-colors cursor-pointer"
+                    >
+                      <Ship className="w-3.5 h-3.5" />
+                      {boatBlocking ? 'Blocking...' : 'Block செய்'}
                     </button>
                   </div>
                 </form>

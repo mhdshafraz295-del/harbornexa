@@ -436,7 +436,7 @@ const checkDeparturePdfs = async (req, res, next) => {
       foundFishers.forEach((f) => fisherMap.set(f.nic.toUpperCase(), f));
     }
 
-    // Cache clearance results for unique Fishers
+    // Cache clearance results for unique Fishers + fetch active holds for block reasons
     const clearanceCache = new Map();
     for (const fisher of fisherMap.values()) {
       const clearanceResult = await getFisherClearanceStatus(fisher.id);
@@ -448,8 +448,25 @@ const checkDeparturePdfs = async (req, res, next) => {
       } else if (clearanceResult.status === 'PENDING') {
         outcome = 'PENDING';
       }
-      clearanceCache.set(fisher.id, { clearanceResult, outcome });
+
+      // Fetch active holds for detailed block reason display in PDF results
+      const activeHolds = await prisma.fisher_holds.findMany({
+        where: { fisher_id: fisher.id, released_at: null },
+        select: { reason_code: true, reason_text: true, hold_date: true },
+        orderBy: { id: 'desc' },
+      });
+
+      const blockReasons = activeHolds.map((h) => {
+        if (h.reason_text && h.reason_text.includes('NIC Block')) return { type: 'NIC_BLOCK', label: `NIC மூலம் Block – ${h.reason_text}` };
+        if (h.reason_text && h.reason_text.includes('Boat Block')) return { type: 'BOAT_BLOCK', label: `Boat மூலம் Block – ${h.reason_text}` };
+        if (h.reason_code === 'PAYMENT_ISSUE') return { type: 'PAYMENT', label: 'Payment Issue' };
+        if (h.reason_code === 'DOCUMENT_ISSUE') return { type: 'DOCUMENT', label: 'Document Issue' };
+        return { type: 'MANUAL', label: h.reason_text || 'Manual Hold' };
+      });
+
+      clearanceCache.set(fisher.id, { clearanceResult, outcome, blockReasons });
     }
+
 
     // Step 3: Map EVERY extracted NIC to result list (including NOT_FOUND)
     let totalNicsExtracted = 0;
@@ -503,6 +520,7 @@ const checkDeparturePdfs = async (req, res, next) => {
           canProceed: cached.clearanceResult.canProceed,
           details: cached.clearanceResult.canProceed ? 'Cleared for departure' : 'Departure hold active',
           reasons: cached.clearanceResult.reasons || [],
+          blockReasons: cached.blockReasons || [],
         };
       });
 

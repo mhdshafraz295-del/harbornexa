@@ -568,10 +568,108 @@ const blockByNic = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/holds/block-by-boat
+ * Block a fisher by Boat Number — any owner/admin can block a person
+ * by boat number even if they didn't register that fisher.
+ */
+const blockByBoat = async (req, res, next) => {
+  try {
+    const { boatNo, notes, reasonText } = req.body;
+
+    if (!boatNo || !boatNo.trim()) {
+      return res.status(400).json({ success: false, message: 'Boat number is required.' });
+    }
+
+    const trimmedBoatNo = boatNo.trim();
+
+    // Find fisher by boat_no (case-insensitive)
+    const fisher = await prisma.fishers.findFirst({
+      where: {
+        boat_no: { contains: trimmedBoatNo },
+        is_archived: false,
+      },
+      select: { id: true, fisher_id: true, full_name: true, nic: true, boat_no: true, status: true },
+    });
+
+    if (!fisher) {
+      return res.status(404).json({
+        success: false,
+        message: `Boat No "${trimmedBoatNo}" க்கு எந்த fisher-உம் கிடைக்கவில்லை. Boat number சரியாக இருக்கிறதா என்று பாருங்கள்.`,
+      });
+    }
+
+    // Check if already has an active NIC/Boat block hold
+    const existingActiveHold = await prisma.fisher_holds.findFirst({
+      where: {
+        fisher_id: fisher.id,
+        released_at: null,
+        reason_code: 'MANAGEMENT_DECISION',
+        reason_text: { contains: 'Boat Block' },
+      },
+    });
+
+    // Create hold in transaction
+    const createdHold = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM fishers WHERE id = ${fisher.id} FOR UPDATE`;
+
+      return await tx.fisher_holds.create({
+        data: {
+          fisher_id: fisher.id,
+          reason_code: 'MANAGEMENT_DECISION',
+          reason_text: reasonText ? reasonText.trim() : `Boat Block – ${trimmedBoatNo}`,
+          notes: notes ? notes.trim() : null,
+          hold_date: new Date(),
+          created_by_admin_id: req.admin?.id || 1,
+        },
+      });
+    });
+
+    await logAudit({
+      adminId: req.admin?.id || null,
+      action: 'BOAT_GLOBAL_BLOCK',
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      metadata: {
+        holdId: Number(createdHold.id),
+        fisherId: Number(fisher.id),
+        customFisherId: fisher.fisher_id,
+        fisherName: fisher.full_name,
+        boatNo: trimmedBoatNo,
+        hadExistingActiveHold: !!existingActiveHold,
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: `"${fisher.full_name}" (Boat: ${fisher.boat_no}) வெற்றிகரமாக block செய்யப்பட்டார்.`,
+      fisher: {
+        id: Number(fisher.id),
+        fisher_id: fisher.fisher_id,
+        full_name: fisher.full_name,
+        nic: fisher.nic,
+        boat_no: fisher.boat_no,
+        status: fisher.status,
+        hadExistingActiveHold: !!existingActiveHold,
+      },
+      hold: {
+        id: Number(createdHold.id),
+        fisher_id: Number(createdHold.fisher_id),
+        reason_code: createdHold.reason_code,
+        reason_text: createdHold.reason_text,
+        hold_date: createdHold.hold_date,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createHold,
   releaseHold,
   getFisherHolds,
   getBlockHistory,
   blockByNic,
+  blockByBoat,
 };

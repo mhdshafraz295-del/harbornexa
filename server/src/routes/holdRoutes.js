@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/authMiddleware');
-const { createHold, releaseHold, getFisherHolds, getBlockHistory, blockByNic } = require('../controllers/holdController');
+const { createHold, releaseHold, getFisherHolds, getBlockHistory, blockByNic, blockByBoat } = require('../controllers/holdController');
 
 router.use(requireAuth);
 
@@ -13,6 +13,9 @@ router.get('/fisher/:fisherId', getFisherHolds);
 
 // Block by NIC number (any owner/admin can block a person by their NIC)
 router.post('/block-by-nic', blockByNic);
+
+// Block by Boat Number (any owner/admin can block a person by boat number)
+router.post('/block-by-boat', blockByBoat);
 
 // Create manual hold
 router.post('/fisher/:fisherId', createHold);
