@@ -103,53 +103,58 @@ function findNicsInSnippet(text) {
 }
 
 /**
- * Extract Boat Registration Numbers from PDF text.
- * Supports Sri Lankan patterns: IMULA0004KLT, SL-1234, BOAT-001, VFRC-123 etc.
+ * Extract Boat Registration Numbers from PDF text, filename, and raw buffer.
+ * Supports Sri Lankan patterns: IMULA0004KLT, IMULA0111GLE, SL-1234, BOAT-001, VFRC-123 etc.
+ * Also performs direct substring matching for any active blocked boats.
  */
-function extractBoatNosFromText(rawText) {
-  if (!rawText || typeof rawText !== 'string') return [];
+function extractBoatNosFromText(rawText, filename = '', activeDirectBoatBlocks = new Set()) {
+  const combinedText = ((rawText || '') + ' \n ' + (filename || '')).toUpperCase();
   const boatNos = new Set();
 
-  // Pattern 1: IMULA followed by digits and letters (e.g., IMULA0004KLT)
-  const imulaRegex = /\bIMULA\d{3,6}[A-Z]{2,4}\b/gi;
+  // Pattern 1: IMULA followed by digits and letters (e.g., IMULA0111GLE, IMULA0004KLT, IMULA-0111-GLE, IMULA0111)
+  const imulaRegex = /\bIMULA[ -]?[0-9A-Z]{3,12}\b/gi;
   let match;
-  while ((match = imulaRegex.exec(rawText)) !== null) {
-    boatNos.add(match[0].toUpperCase());
+  while ((match = imulaRegex.exec(combinedText)) !== null) {
+    const clean = match[0].replace(/[- ]/g, '').toUpperCase();
+    boatNos.add(clean);
   }
 
-  // Pattern 2: SL- followed by digits (e.g., SL-1234)
-  const slRegex = /\bSL-?\d{2,6}\b/gi;
-  while ((match = slRegex.exec(rawText)) !== null) {
-    boatNos.add(match[0].toUpperCase());
+  // Pattern 2: SL- / BOAT- / VFRC- / FRC- / VRC- / REG- patterns
+  const prefixRegex = /\b(?:SL|BOAT|VFRC|FRC|VRC|REG)[ -]?[0-9A-Z]{2,10}\b/gi;
+  while ((match = prefixRegex.exec(combinedText)) !== null) {
+    const clean = match[0].replace(/[- ]/g, '').toUpperCase();
+    boatNos.add(clean);
   }
 
-  // Pattern 3: BOAT- or VFRC- or similar harbor prefix patterns
-  const prefixRegex = /\b(?:BOAT|VFRC|FRC|VRC|REG)-?\d{2,6}\b/gi;
-  while ((match = prefixRegex.exec(rawText)) !== null) {
-    boatNos.add(match[0].toUpperCase());
-  }
-
-  // Pattern 4: Lines containing "vessel", "boat no", "registration" keywords nearby
-  const lines = rawText.split(/\r?\n/);
+  // Pattern 3: Lines containing "vessel", "boat no", "registration" keywords nearby
+  const lines = combinedText.split(/\r?\n/);
   for (const line of lines) {
     const lower = line.toLowerCase();
     if (
       lower.includes('vessel') ||
-      lower.includes('boat no') ||
-      lower.includes('boat number') ||
-      lower.includes('registration no') ||
-      lower.includes('reg no') ||
+      lower.includes('boat') ||
+      lower.includes('registration') ||
+      lower.includes('reg') ||
       lower.includes('கப்பல்') ||
       lower.includes('படகு')
     ) {
-      // Extract any alphanumeric codes on this line (min 4 chars)
       const codeRegex = /\b[A-Z0-9]{4,15}\b/g;
-      while ((match = codeRegex.exec(line.toUpperCase())) !== null) {
-        // Skip pure numbers, skip NIC-like patterns
+      while ((match = codeRegex.exec(line)) !== null) {
         const val = match[0];
         if (!/^\d+$/.test(val) && !/^(?:19|20)\d{10}$/.test(val) && !/^\d{9}[VX]$/.test(val)) {
           boatNos.add(val);
         }
+      }
+    }
+  }
+
+  // Pattern 4: CRITICAL DIRECT MATCHING — Check if any active blocked boat from DB appears in combinedText
+  if (activeDirectBoatBlocks && activeDirectBoatBlocks.size > 0) {
+    const strippedCombinedText = combinedText.replace(/[- _.]/g, '');
+    for (const blockedBoat of activeDirectBoatBlocks) {
+      const cleanBlocked = blockedBoat.replace(/[- _.]/g, '').toUpperCase();
+      if (cleanBlocked && cleanBlocked.length >= 3 && strippedCombinedText.includes(cleanBlocked)) {
+        boatNos.add(blockedBoat.toUpperCase());
       }
     }
   }
@@ -439,7 +444,17 @@ const checkDeparturePdfs = async (req, res, next) => {
 
     const batchId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
     
-    // Step 1: Validate file magic bytes (%PDF-) and extract ALL NICs in memory per file
+    // Load directly blocked boats list from settings (no fisher record needed) upfront
+    const blockedBoatsSetting = await prisma.settings.findUnique({ where: { setting_key: 'blocked_boats_list' } });
+    let directBlockedBoats = [];
+    try {
+      directBlockedBoats = blockedBoatsSetting ? JSON.parse(blockedBoatsSetting.setting_value || '[]') : [];
+    } catch (_) { directBlockedBoats = []; }
+    const activeDirectBoatBlocks = new Set(
+      directBlockedBoats.filter((b) => !b.released_at).map((b) => b.boat_no.toUpperCase())
+    );
+
+    // Step 1: Validate file magic bytes (%PDF-) and extract ALL NICs + Boat Numbers in memory per file
     const fileDataList = [];
     const allNicsSet = new Set();
 
@@ -463,7 +478,7 @@ const checkDeparturePdfs = async (req, res, next) => {
       const extractedNics = await extractNicsFromPdfBufferWithFallback(file.buffer);
       extractedNics.forEach((nic) => allNicsSet.add(nic));
 
-      // Also extract Boat Numbers from raw PDF text
+      // Extract Boat Numbers from raw PDF text + filename + raw buffer + active DB boat blocks
       let rawPdfText = '';
       try {
         if (typeof pdfParse === 'function') {
@@ -471,7 +486,10 @@ const checkDeparturePdfs = async (req, res, next) => {
           rawPdfText = parsed.text || '';
         }
       } catch (_) {}
-      const extractedBoatNos = extractBoatNosFromText(rawPdfText || file.buffer.toString('utf8'));
+      const rawBufferText = file.buffer.toString('utf8') + '\n' + file.buffer.toString('latin1');
+      const combinedPdfText = (rawPdfText || '') + '\n' + rawBufferText;
+
+      const extractedBoatNos = extractBoatNosFromText(combinedPdfText, originalName, activeDirectBoatBlocks);
 
       fileDataList.push({
         filename: originalName,
@@ -527,17 +545,6 @@ const checkDeparturePdfs = async (req, res, next) => {
         if (f.boat_no) boatFisherMap.set(f.boat_no.toUpperCase(), f);
       });
     }
-
-    // Load directly blocked boats list from settings (no fisher record needed)
-    const blockedBoatsSetting = await prisma.settings.findUnique({ where: { setting_key: 'blocked_boats_list' } });
-    let directBlockedBoats = [];
-    try {
-      directBlockedBoats = blockedBoatsSetting ? JSON.parse(blockedBoatsSetting.setting_value || '[]') : [];
-    } catch (_) { directBlockedBoats = []; }
-    // Only active (not released) blocks
-    const activeDirectBoatBlocks = new Set(
-      directBlockedBoats.filter((b) => !b.released_at).map((b) => b.boat_no.toUpperCase())
-    );
 
     // Cache clearance results for unique Fishers (NIC + Boat) + fetch active holds for block reasons
     const clearanceCache = new Map(); // keyed by fisher.id (BigInt)
