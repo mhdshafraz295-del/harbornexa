@@ -272,6 +272,10 @@ async function handleCancelPlan(req, res) {
     });
   } catch (error) {
     console.error('Error cancelling installment plan:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+}
+
 /**
  * DELETE /api/installments/plans/:id
  * Permanently delete an installment plan and its associated dues.
