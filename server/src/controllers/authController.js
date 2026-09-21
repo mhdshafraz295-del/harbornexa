@@ -1,9 +1,4 @@
-let bcrypt;
-try {
-  bcrypt = require('bcrypt');
-} catch (e) {
-  bcrypt = require('bcryptjs');
-}
+const bcrypt = require('bcryptjs');
 const prisma = require('../config/prismaClient');
 const env = require('../config/env');
 const { generateToken } = require('../utils/jwt');
@@ -37,12 +32,12 @@ const login = async (req, res, next) => {
       where: { email },
     });
 
-    if (!admin) {
+    if (!admin || !admin.password_hash) {
       await logAudit({
         action: 'LOGIN_FAILED',
         ipAddress,
         userAgent,
-        metadata: { emailAttempted: email, reason: 'Email not found' },
+        metadata: { emailAttempted: email, reason: 'Email not found or no password set' },
       });
       return res.status(401).json({
         success: false,
@@ -65,8 +60,15 @@ const login = async (req, res, next) => {
       });
     }
 
-    // Verify password with bcrypt
-    const isPasswordValid = await bcrypt.compare(password, admin.password_hash);
+    // Verify password with bcryptjs
+    let isPasswordValid = false;
+    try {
+      isPasswordValid = await bcrypt.compare(String(password), admin.password_hash);
+    } catch (bErr) {
+      console.error('Password verification error:', bErr.message);
+      isPasswordValid = false;
+    }
+
     if (!isPasswordValid) {
       await logAudit({
         adminId: admin.id,

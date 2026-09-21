@@ -6,7 +6,7 @@ const errorHandler = (err, req, res, next) => {
   const statusCode = err.statusCode || 500;
   const response = {
     success: false,
-    message: statusCode === 500 ? 'An internal server error occurred.' : err.message,
+    message: err.message || 'An internal server error occurred.',
   };
 
   if (env.nodeEnv === 'development') {

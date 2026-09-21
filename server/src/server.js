@@ -1,12 +1,8 @@
 const app = require('./app');
 const env = require('./config/env');
 const prisma = require('./config/prismaClient');
-let bcrypt;
-try {
-  bcrypt = require('bcrypt');
-} catch (e) {
-  bcrypt = require('bcryptjs');
-}
+const bcrypt = require('bcryptjs');
+
 
 const PORT = env.port;
 
