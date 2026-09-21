@@ -208,9 +208,54 @@ const createFisher = async (req, res, next) => {
     // 5. Check duplicate NIC in DB first via Prisma
     const existingNic = await prisma.fishers.findUnique({
       where: { nic: normalizedNic },
-      select: { id: true },
+      select: { id: true, fisher_id: true, full_name: true, status: true, boat_no: true, phone: true },
     });
     if (existingNic) {
+      if (validStatus === 'BLOCKED') {
+        // If status is BLOCKED, automatically add a new manual block/hold for this existing fisher!
+        const createdHold = await prisma.fisher_holds.create({
+          data: {
+            fisher_id: existingNic.id,
+            reason_code: 'MANAGEMENT_DECISION',
+            reason_text: notes ? `Manual Block – ${notes.trim()}` : 'Admin Block',
+            notes: notes ? notes.trim() : null,
+            hold_date: new Date(),
+            created_by_admin_id: req.admin?.id || 1,
+          },
+        });
+
+        // Also update fisher status to BLOCKED and update boat_no/phone/address if provided
+        const updateFields = { status: 'BLOCKED' };
+        if (boat_no) updateFields.boat_no = boat_no.trim();
+        if (phone) updateFields.phone = normalizedPhone;
+        if (address) updateFields.address = address.trim();
+
+        const updatedFisher = await prisma.fishers.update({
+          where: { id: existingNic.id },
+          data: updateFields,
+        });
+
+        await logAudit({
+          adminId: req.admin?.id || null,
+          action: 'FISHER_BLOCKED_EXISTING',
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+          metadata: {
+            id: Number(existingNic.id),
+            fisherId: existingNic.fisher_id,
+            fullName: existingNic.full_name,
+            nic: normalizedNic,
+            holdId: Number(createdHold.id),
+          },
+        });
+
+        return res.status(200).json({
+          success: true,
+          message: `"${existingNic.full_name}" (NIC: ${normalizedNic}) ஏற்கனவே உள்ள கணக்கில் புதிய Block வெற்றிகரமாக பதிவு செய்யப்பட்டது!`,
+          fisher: mapFisherResponse(updatedFisher),
+        });
+      }
+
       return res.status(409).json({
         success: false,
         message: 'A fisher with this NIC already exists.',
