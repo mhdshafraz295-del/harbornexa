@@ -32,11 +32,13 @@ async function ensureDefaultAdmins() {
         },
       });
       console.log(`✔ Admin account "${adminEmail}" (${adminName}) created successfully.`);
-    } else if (existing.status !== 'ACTIVE') {
+    } else {
+      const passwordHash = await bcrypt.hash(rawPass, 10);
       await prisma.admins.update({
         where: { email: adminEmail },
-        data: { status: 'ACTIVE' },
+        data: { status: 'ACTIVE', password_hash: passwordHash },
       });
+      console.log(`✔ Admin account "${adminEmail}" password forcefully reset.`);
     }
 
     // Seed 2: Restricted Checker Account
@@ -60,11 +62,13 @@ async function ensureDefaultAdmins() {
         },
       });
       console.log(`✔ Checker account "${checkerEmail}" created successfully.`);
-    } else if (existingChecker.status !== 'ACTIVE') {
+    } else {
+      const checkerPasswordHash = await bcrypt.hash(checkerRawPass, 10);
       await prisma.admins.update({
         where: { email: checkerEmail },
-        data: { status: 'ACTIVE' },
+        data: { status: 'ACTIVE', password_hash: checkerPasswordHash },
       });
+      console.log(`✔ Checker account "${checkerEmail}" password forcefully reset.`);
     }
   } catch (err) {
     console.warn('Notice: Could not auto-seed admin account:', err.message);
