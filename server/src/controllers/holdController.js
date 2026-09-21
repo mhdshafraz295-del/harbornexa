@@ -437,6 +437,7 @@ const getBlockHistory = async (req, res, next) => {
     } catch (_) { directBlockedBoats = []; }
 
     const boatBlocks = directBlockedBoats
+      .filter((b) => !b.released_at)
       .filter((b) => {
         if (!trimmedSearch) return true;
         return (
@@ -727,23 +728,21 @@ const unblockBoat = async (req, res, next) => {
     }
 
     // Find active block for this boat
-    const blockIndex = blockedBoats.findIndex(
+    const hasBlock = blockedBoats.some(
       (b) => b.boat_no.toUpperCase() === trimmedBoatNo && !b.released_at
     );
 
-    if (blockIndex === -1) {
+    if (!hasBlock) {
       return res.status(404).json({
         success: false,
         message: `Boat "${trimmedBoatNo}" க்கு active block எதுவும் இல்லை.`,
       });
     }
 
-    // Mark as released
-    blockedBoats[blockIndex].released_at = new Date().toISOString();
-    blockedBoats[blockIndex].released_by_admin_id = req.admin?.id || 1;
-    blockedBoats[blockIndex].release_notes = releaseNotes ? releaseNotes.trim() : 'Unblocked by admin';
+    // Completely remove/delete all entries for this boat number from the blocked list
+    blockedBoats = blockedBoats.filter((b) => b.boat_no.toUpperCase() !== trimmedBoatNo);
 
-    // Save back to settings
+    // Save updated list back to settings
     await prisma.settings.update({
       where: { setting_key: settingKey },
       data: { setting_value: JSON.stringify(blockedBoats), updated_at: new Date() },
@@ -751,7 +750,7 @@ const unblockBoat = async (req, res, next) => {
 
     await logAudit({
       adminId: req.admin?.id || null,
-      action: 'BOAT_DIRECT_UNBLOCK',
+      action: 'BOAT_DIRECT_UNBLOCK_DELETE',
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
       metadata: {
@@ -762,7 +761,7 @@ const unblockBoat = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      message: `Boat "${trimmedBoatNo}" வெற்றிகரமாக unblock செய்யப்பட்டது!`,
+      message: `Boat "${trimmedBoatNo}" வெற்றிகரமாக Unblock செய்யப்பட்டு List-ல் இருந்து நீக்கப்பட்டது!`,
       boatNo: trimmedBoatNo,
     });
   } catch (error) {
