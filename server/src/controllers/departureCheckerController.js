@@ -103,6 +103,61 @@ function findNicsInSnippet(text) {
 }
 
 /**
+ * Extract Boat Registration Numbers from PDF text.
+ * Supports Sri Lankan patterns: IMULA0004KLT, SL-1234, BOAT-001, VFRC-123 etc.
+ */
+function extractBoatNosFromText(rawText) {
+  if (!rawText || typeof rawText !== 'string') return [];
+  const boatNos = new Set();
+
+  // Pattern 1: IMULA followed by digits and letters (e.g., IMULA0004KLT)
+  const imulaRegex = /\bIMULA\d{3,6}[A-Z]{2,4}\b/gi;
+  let match;
+  while ((match = imulaRegex.exec(rawText)) !== null) {
+    boatNos.add(match[0].toUpperCase());
+  }
+
+  // Pattern 2: SL- followed by digits (e.g., SL-1234)
+  const slRegex = /\bSL-?\d{2,6}\b/gi;
+  while ((match = slRegex.exec(rawText)) !== null) {
+    boatNos.add(match[0].toUpperCase());
+  }
+
+  // Pattern 3: BOAT- or VFRC- or similar harbor prefix patterns
+  const prefixRegex = /\b(?:BOAT|VFRC|FRC|VRC|REG)-?\d{2,6}\b/gi;
+  while ((match = prefixRegex.exec(rawText)) !== null) {
+    boatNos.add(match[0].toUpperCase());
+  }
+
+  // Pattern 4: Lines containing "vessel", "boat no", "registration" keywords nearby
+  const lines = rawText.split(/\r?\n/);
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (
+      lower.includes('vessel') ||
+      lower.includes('boat no') ||
+      lower.includes('boat number') ||
+      lower.includes('registration no') ||
+      lower.includes('reg no') ||
+      lower.includes('கப்பல்') ||
+      lower.includes('படகு')
+    ) {
+      // Extract any alphanumeric codes on this line (min 4 chars)
+      const codeRegex = /\b[A-Z0-9]{4,15}\b/g;
+      while ((match = codeRegex.exec(line.toUpperCase())) !== null) {
+        // Skip pure numbers, skip NIC-like patterns
+        const val = match[0];
+        if (!/^\d+$/.test(val) && !/^(?:19|20)\d{10}$/.test(val) && !/^\d{9}[VX]$/.test(val)) {
+          boatNos.add(val);
+        }
+      }
+    }
+  }
+
+  return Array.from(boatNos);
+}
+
+/**
  * Context-aware NIC extractor targeting ALL Skipper and Crew NICs in DFAR Departure Manifests.
  * Preserves every extracted Skipper + Crew NIC (both matched and NOT_FOUND).
  * Strictly ignores "Departure Approved By" officer NIC, vessel registration numbers, and phone numbers.
@@ -408,16 +463,27 @@ const checkDeparturePdfs = async (req, res, next) => {
       const extractedNics = await extractNicsFromPdfBufferWithFallback(file.buffer);
       extractedNics.forEach((nic) => allNicsSet.add(nic));
 
+      // Also extract Boat Numbers from raw PDF text
+      let rawPdfText = '';
+      try {
+        if (typeof pdfParse === 'function') {
+          const parsed = await pdfParse(file.buffer);
+          rawPdfText = parsed.text || '';
+        }
+      } catch (_) {}
+      const extractedBoatNos = extractBoatNosFromText(rawPdfText || file.buffer.toString('utf8'));
+
       fileDataList.push({
         filename: originalName,
         status: 'PROCESSED',
         extractedNics,
+        extractedBoatNos,
       });
     }
 
     // Step 2: Batch DB query & memoized clearance status calculation across unique NICs
     const uniqueNics = Array.from(allNicsSet);
-    const fisherMap = new Map();
+    const fisherMap = new Map(); // keyed by NIC (uppercase)
     if (uniqueNics.length > 0) {
       const foundFishers = await prisma.fishers.findMany({
         where: {
@@ -436,9 +502,40 @@ const checkDeparturePdfs = async (req, res, next) => {
       foundFishers.forEach((f) => fisherMap.set(f.nic.toUpperCase(), f));
     }
 
-    // Cache clearance results for unique Fishers + fetch active holds for block reasons
-    const clearanceCache = new Map();
-    for (const fisher of fisherMap.values()) {
+    // Step 2b: Also collect all extracted boat numbers and find fishers by boat_no
+    const allBoatNosSet = new Set();
+    fileDataList.forEach((fd) => {
+      if (fd.extractedBoatNos) fd.extractedBoatNos.forEach((b) => allBoatNosSet.add(b.toUpperCase()));
+    });
+    const boatFisherMap = new Map(); // keyed by boat_no (uppercase)
+    if (allBoatNosSet.size > 0) {
+      const boatFishers = await prisma.fishers.findMany({
+        where: {
+          boat_no: { in: Array.from(allBoatNosSet) },
+          is_archived: false,
+        },
+        select: {
+          id: true,
+          fisher_id: true,
+          full_name: true,
+          boat_no: true,
+          nic: true,
+          status: true,
+        },
+      });
+      boatFishers.forEach((f) => {
+        if (f.boat_no) boatFisherMap.set(f.boat_no.toUpperCase(), f);
+      });
+    }
+
+    // Cache clearance results for unique Fishers (NIC + Boat) + fetch active holds for block reasons
+    const clearanceCache = new Map(); // keyed by fisher.id (BigInt)
+    const allFishersToCache = new Map();
+    fisherMap.forEach((f) => allFishersToCache.set(String(f.id), f));
+    boatFisherMap.forEach((f) => allFishersToCache.set(String(f.id), f));
+
+    for (const fisher of allFishersToCache.values()) {
+      if (clearanceCache.has(String(fisher.id))) continue; // already cached
       const clearanceResult = await getFisherClearanceStatus(fisher.id);
       let outcome = 'NOT_FOUND';
       if (clearanceResult.status === 'CLEARED') {
@@ -464,9 +561,8 @@ const checkDeparturePdfs = async (req, res, next) => {
         return { type: 'MANUAL', label: h.reason_text || 'Manual Hold' };
       });
 
-      clearanceCache.set(fisher.id, { clearanceResult, outcome, blockReasons });
+      clearanceCache.set(String(fisher.id), { clearanceResult, outcome, blockReasons });
     }
-
 
     // Step 3: Map EVERY extracted NIC to result list (including NOT_FOUND)
     let totalNicsExtracted = 0;
@@ -501,10 +597,11 @@ const checkDeparturePdfs = async (req, res, next) => {
             canProceed: false,
             details: 'Fisher NIC not found in database',
             reasons: [{ code: 'NOT_FOUND', label: 'Fisher record not registered in database' }],
+            blockReasons: [],
           };
         }
 
-        const cached = clearanceCache.get(fisher.id);
+        const cached = clearanceCache.get(String(fisher.id));
         const outcome = cached.outcome;
         if (outcome === 'APPROVED') totalApproved++;
         else if (outcome === 'BLC') totalBlc++;
@@ -523,6 +620,40 @@ const checkDeparturePdfs = async (req, res, next) => {
           blockReasons: cached.blockReasons || [],
         };
       });
+
+      // Also add boat-number based blocked results (fishers found by boat_no but NOT already in NIC results)
+      const nicResultSet = new Set(results.map((r) => r.fisherId).filter(Boolean));
+      if (fileData.extractedBoatNos && fileData.extractedBoatNos.length > 0) {
+        for (const rawBoat of fileData.extractedBoatNos) {
+          const normalizedBoat = rawBoat.trim().toUpperCase();
+          const boatFisher = boatFisherMap.get(normalizedBoat);
+          if (!boatFisher) continue;
+          if (nicResultSet.has(boatFisher.fisher_id)) continue; // already in NIC results
+
+          const cached = clearanceCache.get(String(boatFisher.id));
+          if (!cached) continue;
+          const outcome = cached.outcome;
+
+          // Only add to results if fisher is BLOCKED — so we don't duplicate approved ones
+          if (outcome === 'BLC') {
+            totalBlc++;
+            totalNicsExtracted++;
+            results.push({
+              nic: boatFisher.nic || '—',
+              fisherId: boatFisher.fisher_id,
+              fisherName: boatFisher.full_name,
+              boatNo: boatFisher.boat_no || normalizedBoat,
+              status: 'BLC',
+              outcome: 'BLC',
+              canProceed: false,
+              details: `⛔ Boat Block – ${normalizedBoat}`,
+              reasons: [],
+              blockReasons: cached.blockReasons || [],
+              detectedBy: 'BOAT_NO',
+            });
+          }
+        }
+      }
 
       return {
         filename: fileData.filename,
