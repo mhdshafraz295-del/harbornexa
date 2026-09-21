@@ -155,6 +155,7 @@ export const BlockHistoryPage = () => {
   };
 
   const handleViewFisherDetail = (fisherId, fullName, customFisherId) => {
+    if (!fisherId) return;
     setSelectedFisherForDetail({ id: fisherId, full_name: fullName, fisher_id: customFisherId });
     setIsDetailDrawerOpen(true);
   };

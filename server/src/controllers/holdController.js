@@ -428,28 +428,66 @@ const getBlockHistory = async (req, res, next) => {
       hold_date: null,
     }));
 
+    // 4. Fetch Direct Boat Blocks (from settings: blocked_boats_list)
+    const settingKey = 'blocked_boats_list';
+    const boatSetting = await prisma.settings.findUnique({ where: { setting_key: settingKey } });
+    let directBlockedBoats = [];
+    try {
+      directBlockedBoats = boatSetting ? JSON.parse(boatSetting.setting_value || '[]') : [];
+    } catch (_) { directBlockedBoats = []; }
+
+    const boatBlocks = directBlockedBoats
+      .filter((b) => {
+        if (!trimmedSearch) return true;
+        return (
+          b.boat_no.toLowerCase().includes(trimmedSearch.toLowerCase()) ||
+          (b.notes && b.notes.toLowerCase().includes(trimmedSearch.toLowerCase()))
+        );
+      })
+      .map((b, idx) => ({
+        id: `boat-block-${idx}-${b.boat_no}`,
+        fisher_id: null,
+        custom_fisher_id: '—',
+        full_name: 'Direct Boat Block',
+        nic: '—',
+        phone: '—',
+        boat_no: b.boat_no,
+        base_status: 'BLOCKED',
+        reason_code: 'BOAT_BLOCK',
+        reason_text: `Boat Block – ${b.boat_no}`,
+        notes: b.notes || null,
+        block_type: 'BOAT_BLOCK',
+        hold_status: b.released_at ? 'RELEASED' : 'ACTIVE',
+        hold_date: b.blocked_at || null,
+        released_at: b.released_at || null,
+        created_by_name: 'System Admin',
+      }));
+
     // Combine items based on active tab filter
     let allItems = [];
     if (tab === 'ACTIVE') {
-      allItems = manualHolds.filter((h) => h.hold_status === 'ACTIVE');
+      const activeManual = manualHolds.filter((h) => h.hold_status === 'ACTIVE');
+      const activeBoatBlocks = boatBlocks.filter((b) => b.hold_status === 'ACTIVE');
+      allItems = [...activeBoatBlocks, ...activeManual];
     } else if (tab === 'HISTORY') {
-      allItems = manualHolds;
+      allItems = [...boatBlocks, ...manualHolds];
     } else if (tab === 'DEBT') {
       allItems = debtHolds;
     } else if (tab === 'ADMIN_BLOCK') {
-      allItems = adminBlocks;
+      allItems = [...boatBlocks, ...adminBlocks];
     } else {
-      allItems = [...manualHolds, ...debtHolds, ...adminBlocks];
+      allItems = [...boatBlocks, ...manualHolds, ...debtHolds, ...adminBlocks];
     }
 
     const total = allItems.length;
     const totalPages = Math.ceil(total / limitNum) || 1;
     const paginatedItems = allItems.slice(offset, offset + limitNum);
 
-    const activeManualCount = manualHolds.filter((h) => h.hold_status === 'ACTIVE').length;
-    const historyCount = manualHolds.length;
+    const activeManualCount = manualHolds.filter((h) => h.hold_status === 'ACTIVE').length + boatBlocks.filter((b) => b.hold_status === 'ACTIVE').length;
+    const historyCount = manualHolds.length + boatBlocks.length;
     const debtCount = debtHolds.length;
-    const adminBlockCount = adminBlocks.length;
+    const adminBlockCount = adminBlocks.length + boatBlocks.length;
+    const boatBlockCount = boatBlocks.filter((b) => b.hold_status === 'ACTIVE').length;
 
     return res.status(200).json({
       success: true,
@@ -459,6 +497,7 @@ const getBlockHistory = async (req, res, next) => {
         historyCount,
         debtCount,
         adminBlockCount,
+        boatBlockCount,
       },
       pagination: {
         page: pageNum,
