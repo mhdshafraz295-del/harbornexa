@@ -65,7 +65,7 @@ export const AdminLayout = () => {
     navigate('/login', { replace: true });
   };
 
-  const isChecker = admin?.role === 'CHECKER';
+  const isChecker = admin?.role?.toUpperCase() === 'CHECKER' || admin?.email?.toLowerCase() === 'alamanuser@gmail.com';
   const checkerAllowedPaths = ['/admin/departure-pdf-checker', '/admin/departure-checker', '/admin/clearance', '/admin/block-history'];
 
   // Protect routes for CHECKER role: redirect away from forbidden pages to Departure PDF Checker

@@ -39,7 +39,8 @@ export const LoginPage = () => {
     try {
       setIsSubmitting(true);
       const loggedInAdmin = await loginUser(email, password);
-      if (loggedInAdmin?.role === 'CHECKER') {
+      const isChecker = loggedInAdmin?.role?.toUpperCase() === 'CHECKER' || loggedInAdmin?.email?.toLowerCase() === 'alamanuser@gmail.com';
+      if (isChecker) {
         navigate('/admin/departure-pdf-checker', { replace: true });
       } else {
         navigate('/admin/dashboard', { replace: true });

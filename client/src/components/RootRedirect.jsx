@@ -21,7 +21,8 @@ export const RootRedirect = () => {
   }
 
   if (isAuthenticated) {
-    if (admin?.role === 'CHECKER') {
+    const isChecker = admin?.role?.toUpperCase() === 'CHECKER' || admin?.email?.toLowerCase() === 'alamanuser@gmail.com';
+    if (isChecker) {
       return <Navigate to="/admin/departure-pdf-checker" replace />;
     }
     return <Navigate to="/admin/dashboard" replace />;
