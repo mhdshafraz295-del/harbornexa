@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "cd server && npm install && npx prisma generate",
-    "start": "node server/src/server.js"
+    "build": "node -e \"const fs=require('fs'); if (fs.existsSync('server')) { process.chdir('server'); } require('child_process').execSync('npm install && npx prisma generate', {stdio:'inherit'});\"",
+    "start": "node -e \"const fs=require('fs'); if (fs.existsSync('server/src/server.js')) { require('./server/src/server.js'); } else { require('./src/server.js'); }\""
   }
 }

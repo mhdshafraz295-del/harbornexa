@@ -74,8 +74,8 @@ app.use('/api/departure-pdf-checker', departureCheckerRoutes);
 app.use('/api/installments', installmentRoutes);
 app.use('/api/email', emailRoutes);
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
+// Health check endpoints for Railway load balancer
+app.get(['/health', '/api/health'], (req, res) => {
   res.status(200).json({
     status: 'ok',
     system: 'Valachchenai Harbor Fisher Clearance Management System API',
