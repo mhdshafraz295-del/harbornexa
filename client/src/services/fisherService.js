@@ -29,3 +29,9 @@ export const restoreFisher = async (id) => {
   const response = await api.post(`/fishers/${id}/restore`);
   return response.data;
 };
+
+export const deleteFisher = async (id) => {
+  const response = await api.delete(`/fishers/${id}`);
+  return response.data;
+};
+

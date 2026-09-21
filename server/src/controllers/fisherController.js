@@ -553,6 +553,57 @@ const restoreFisher = async (req, res, next) => {
   }
 };
 
+/**
+ * DELETE /api/fishers/:id
+ * Permanently delete Fisher from system
+ */
+const deleteFisher = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const isNumeric = !isNaN(Number(id));
+    if (!isNumeric) {
+      return res.status(400).json({ success: false, message: 'Invalid fisher ID.' });
+    }
+
+    const fisherIdNum = BigInt(id);
+
+    const existing = await prisma.fishers.findUnique({
+      where: { id: fisherIdNum },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Fisher not found.' });
+    }
+
+    // Delete related records in transaction
+    await prisma.$transaction(async (tx) => {
+      await tx.fisher_holds.deleteMany({ where: { fisher_id: fisherIdNum } });
+      await tx.fisher_qr_tokens.deleteMany({ where: { fisher_id: fisherIdNum } });
+      await tx.clearance_records.deleteMany({ where: { fisher_id: fisherIdNum } });
+      await tx.debt_payments.deleteMany({ where: { fisher_id: fisherIdNum } });
+      await tx.installment_dues.deleteMany({ where: { installment_plans: { fisher_id: fisherIdNum } } });
+      await tx.installment_plans.deleteMany({ where: { fisher_id: fisherIdNum } });
+      await tx.fisher_debts.deleteMany({ where: { fisher_id: fisherIdNum } });
+      await tx.fishers.delete({ where: { id: fisherIdNum } });
+    });
+
+    await logAudit({
+      adminId: req.admin?.id || null,
+      action: 'FISHER_PERMANENTLY_DELETED',
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      metadata: { id: Number(id), fisherId: existing.fisher_id, fullName: existing.full_name },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Fisher record permanently deleted from system.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getFishers,
   getFisherById,
@@ -560,5 +611,7 @@ module.exports = {
   updateFisher,
   archiveFisher,
   restoreFisher,
+  deleteFisher,
 };
+
 

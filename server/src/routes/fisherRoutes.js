@@ -8,6 +8,7 @@ const {
   updateFisher,
   archiveFisher,
   restoreFisher,
+  deleteFisher,
 } = require('../controllers/fisherController');
 
 // All routes require authenticated Admin session
@@ -19,5 +20,7 @@ router.post('/', createFisher);
 router.patch('/:id', updateFisher);
 router.post('/:id/archive', archiveFisher);
 router.post('/:id/restore', restoreFisher);
+router.delete('/:id', deleteFisher);
 
 module.exports = router;
+

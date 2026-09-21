@@ -6,7 +6,9 @@ import {
   updateFisher,
   archiveFisher,
   restoreFisher,
+  deleteFisher,
 } from '../services/fisherService';
+import { useAuth } from '../hooks/useAuth';
 import { createDebt } from '../services/debtService';
 import { FisherModal } from '../components/fishers/FisherModal';
 import { FisherDetailDrawer } from '../components/fishers/FisherDetailDrawer';
@@ -32,10 +34,15 @@ import {
   CreditCard,
   Coins,
   Lock,
+  Trash2,
 } from 'lucide-react';
 
 export const FishersPage = () => {
+  const { admin } = useAuth();
+  const isReadOnly = admin?.role?.toUpperCase() === 'CHECKER' || admin?.email?.toLowerCase() === 'alamanuser@gmail.com';
+
   const [searchParams, setSearchParams] = useSearchParams();
+
 
   const [fishers, setFishers] = useState([]);
   const [counts, setCounts] = useState({ all: 0, active: 0, blocked: 0, pending: 0, archived: 0 });
@@ -201,7 +208,19 @@ export const FishersPage = () => {
     }
   };
 
+  const handleDelete = async (id, name) => {
+    if (window.confirm(`Are you sure you want to PERMANENTLY delete "${name || 'this fisher'}"? This record and all associated data will be completely removed from the system.`)) {
+      try {
+        await deleteFisher(id);
+        fetchFisherData();
+      } catch (err) {
+        alert(err.message || 'Failed to delete fisher record.');
+      }
+    }
+  };
+
   const handleViewDetail = (fisher) => {
+
     setSelectedFisherForView(fisher);
     setIsDrawerOpen(true);
   };
@@ -505,6 +524,15 @@ export const FishersPage = () => {
                               <Archive className="w-4 h-4" />
                             </button>
                           )}
+                          {!isReadOnly && (
+                            <button
+                              onClick={() => handleDelete(fisher.id, fisher.full_name)}
+                              title="Permanently Delete Fisher"
+                              className="p-1.5 rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -593,6 +621,15 @@ export const FishersPage = () => {
                       >
                         Edit
                       </button>
+                      {!isReadOnly && (
+                        <button
+                          onClick={() => handleDelete(fisher.id, fisher.full_name)}
+                          className="px-2.5 py-1 bg-red-50 border border-red-200 rounded-lg text-xs font-bold text-red-700 hover:bg-red-100 flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                          <span>Delete</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -666,8 +703,10 @@ export const FishersPage = () => {
         onEdit={handleOpenEditModal}
         onArchive={handleArchive}
         onRestore={handleRestore}
+        onDelete={handleDelete}
         onAddDebt={handleOpenAddDebt}
         onManageHold={handleOpenManageHold}
+        isReadOnly={isReadOnly}
       />
 
       {/* Add Debt Modal */}

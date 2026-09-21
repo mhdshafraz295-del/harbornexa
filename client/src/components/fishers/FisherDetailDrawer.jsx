@@ -22,6 +22,7 @@ import {
   ChevronDown,
   ChevronUp,
   QrCode,
+  Trash2,
 } from 'lucide-react';
 import { getFisherFinancialInfo } from '../../services/debtService';
 import { getQrStatus, generateQrToken, revokeQrToken } from '../../services/qrService';
@@ -35,6 +36,7 @@ export const FisherDetailDrawer = ({
   onEdit,
   onArchive,
   onRestore,
+  onDelete,
   onAddDebt,
   onRecordPayment,
   onManageHold,
@@ -644,7 +646,22 @@ export const FisherDetailDrawer = ({
                     Archive
                   </button>
                 )}
+
+                {onDelete && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onDelete(fisher.id, fisher.full_name);
+                    }}
+                    className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer"
+                    title="Permanently Delete Fisher"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-600" />
+                    <span>Delete</span>
+                  </button>
+                )}
               </div>
+
             </>
           )}
         </div>
