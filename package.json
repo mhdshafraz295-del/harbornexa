@@ -3,8 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "postinstall": "cd server && npm install && npx prisma generate",
     "build": "cd server && npm install && npx prisma generate",
-    "start": "cd server && npm start"
+    "start": "node server/src/server.js"
   }
 }
