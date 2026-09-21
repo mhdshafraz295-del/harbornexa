@@ -41,7 +41,7 @@ export const LoginPage = () => {
       const loggedInAdmin = await loginUser(email, password);
       const isChecker = loggedInAdmin?.role?.toUpperCase() === 'CHECKER' || loggedInAdmin?.email?.toLowerCase() === 'alamanuser@gmail.com';
       if (isChecker) {
-        navigate('/admin/departure-pdf-checker', { replace: true });
+        navigate('/admin/block-history', { replace: true });
       } else {
         navigate('/admin/dashboard', { replace: true });
       }

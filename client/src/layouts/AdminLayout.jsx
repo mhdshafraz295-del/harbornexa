@@ -66,15 +66,15 @@ export const AdminLayout = () => {
   };
 
   const isChecker = admin?.role?.toUpperCase() === 'CHECKER' || admin?.email?.toLowerCase() === 'alamanuser@gmail.com';
-  const checkerAllowedPaths = ['/admin/departure-pdf-checker', '/admin/departure-checker', '/admin/clearance', '/admin/block-history'];
+  const checkerAllowedPaths = ['/admin/block-history', '/admin/clearance'];
 
-  // Protect routes for CHECKER role: redirect away from forbidden pages to Departure PDF Checker
+  // Protect routes for CHECKER role: redirect away from forbidden pages to Block History
   useEffect(() => {
     if (isChecker) {
       const currentPath = location.pathname;
       const isAllowed = checkerAllowedPaths.some((p) => currentPath.startsWith(p));
       if (!isAllowed) {
-        navigate('/admin/departure-pdf-checker', { replace: true });
+        navigate('/admin/block-history', { replace: true });
       }
     }
   }, [isChecker, location.pathname, navigate]);
