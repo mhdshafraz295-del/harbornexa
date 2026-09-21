@@ -581,7 +581,18 @@ const deleteFisher = async (req, res, next) => {
       await tx.fisher_qr_tokens.deleteMany({ where: { fisher_id: fisherIdNum } });
       await tx.clearance_records.deleteMany({ where: { fisher_id: fisherIdNum } });
       await tx.debt_payments.deleteMany({ where: { fisher_id: fisherIdNum } });
-      await tx.installment_dues.deleteMany({ where: { installment_plans: { fisher_id: fisherIdNum } } });
+
+      const plans = await tx.installment_plans.findMany({
+        where: { fisher_id: fisherIdNum },
+        select: { id: true },
+      });
+      if (plans.length > 0) {
+        const planIds = plans.map((p) => p.id);
+        await tx.installment_dues.deleteMany({
+          where: { plan_id: { in: planIds } },
+        });
+      }
+
       await tx.installment_plans.deleteMany({ where: { fisher_id: fisherIdNum } });
       await tx.fisher_debts.deleteMany({ where: { fisher_id: fisherIdNum } });
       await tx.fishers.delete({ where: { id: fisherIdNum } });
