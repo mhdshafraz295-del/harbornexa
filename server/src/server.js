@@ -44,7 +44,7 @@ async function ensureDefaultAdmins() {
     // Seed 2: Restricted Checker Account
     const checkerEmail = 'alamanuser@gmail.com';
     const checkerName = 'Al Safa Checker';
-    const checkerRawPass = 'Al_Safa_2026';
+    const checkerRawPass = 'Al_Aman_2026';
 
     const existingChecker = await prisma.admins.findUnique({
       where: { email: checkerEmail },
