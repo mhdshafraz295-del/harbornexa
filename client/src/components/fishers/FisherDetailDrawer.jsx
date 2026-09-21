@@ -38,6 +38,7 @@ export const FisherDetailDrawer = ({
   onAddDebt,
   onRecordPayment,
   onManageHold,
+  isReadOnly = false,
 }) => {
   const [financialData, setFinancialData] = useState(null);
   const [loadingFinancials, setLoadingFinancials] = useState(false);
@@ -363,28 +364,32 @@ export const FisherDetailDrawer = ({
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => setIsReissueConfirmOpen(true)}
-                  disabled={loadingQr}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] rounded-xl text-xs font-extrabold transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  <span>Reissue QR</span>
-                </button>
+                {!isReadOnly && (
+                  <button
+                    type="button"
+                    onClick={() => setIsReissueConfirmOpen(true)}
+                    disabled={loadingQr}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] rounded-xl text-xs font-extrabold transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Reissue QR</span>
+                  </button>
+                )}
               </div>
             ) : (
               <div className="p-3 bg-white border border-dashed border-[#E5E7EB] rounded-xl text-center space-y-2">
                 <p className="text-xs font-bold text-slate-600">No active QR card issued.</p>
-                <button
-                  type="button"
-                  onClick={handleGenerateQr}
-                  disabled={loadingQr}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] rounded-xl text-xs font-extrabold transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Generate QR</span>
-                </button>
+                {!isReadOnly && (
+                  <button
+                    type="button"
+                    onClick={handleGenerateQr}
+                    disabled={loadingQr}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] rounded-xl text-xs font-extrabold transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Generate QR</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -562,75 +567,86 @@ export const FisherDetailDrawer = ({
 
         {/* Drawer Footer Actions */}
         <div className="p-4 border-t border-[#E5E7EB] bg-white flex flex-col gap-2">
-          <button
-            onClick={() => {
-              onClose();
-              window.location.href = `/admin/clearance?fisherId=${fisher.id}`;
-            }}
-            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-[#FFF7D6] hover:bg-[#FFD978] text-[#111827] border border-[#FFD978] rounded-xl text-xs font-extrabold cursor-pointer transition-colors"
-          >
-            <ShieldCheck className="w-4 h-4 text-[#D9A441]" />
-            <span>View Clearance</span>
-          </button>
-
-          <div className="grid grid-cols-2 gap-2">
+          {isReadOnly ? (
             <button
-              onClick={() => {
-                onClose();
-                if (onAddDebt) onAddDebt(fisher);
-              }}
-              className="flex items-center justify-center gap-1.5 px-3 py-2 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] rounded-xl text-xs font-extrabold cursor-pointer"
+              onClick={onClose}
+              className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
-              <span>Add Debt</span>
+              Close
             </button>
-
-            <button
-              onClick={() => {
-                onClose();
-                if (onManageHold) onManageHold(fisher);
-              }}
-              className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-[#E5E7EB] hover:bg-red-50 text-red-800 rounded-xl text-xs font-extrabold cursor-pointer"
-            >
-              <Lock className="w-4 h-4" />
-              <span>Manage Hold</span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                onClose();
-                onEdit(fisher);
-              }}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-[#111827] rounded-xl text-xs font-bold cursor-pointer"
-            >
-              <Edit className="w-4 h-4" />
-              <span>Edit</span>
-            </button>
-
-            {fisher.is_archived ? (
+          ) : (
+            <>
               <button
                 onClick={() => {
-                  onRestore(fisher.id);
                   onClose();
+                  window.location.href = `/admin/clearance?fisherId=${fisher.id}`;
                 }}
-                className="px-3 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 rounded-xl text-xs font-extrabold cursor-pointer"
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-[#FFF7D6] hover:bg-[#FFD978] text-[#111827] border border-[#FFD978] rounded-xl text-xs font-extrabold cursor-pointer transition-colors"
               >
-                Restore
+                <ShieldCheck className="w-4 h-4 text-[#D9A441]" />
+                <span>View Clearance</span>
               </button>
-            ) : (
-              <button
-                onClick={() => {
-                  onArchive(fisher.id);
-                  onClose();
-                }}
-                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold cursor-pointer"
-              >
-                Archive
-              </button>
-            )}
-          </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    onClose();
+                    if (onAddDebt) onAddDebt(fisher);
+                  }}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] rounded-xl text-xs font-extrabold cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Debt</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    onClose();
+                    if (onManageHold) onManageHold(fisher);
+                  }}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-[#E5E7EB] hover:bg-red-50 text-red-800 rounded-xl text-xs font-extrabold cursor-pointer"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>Manage Hold</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    onClose();
+                    onEdit(fisher);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-[#111827] rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  <Edit className="w-4 h-4" />
+                  <span>Edit</span>
+                </button>
+
+                {fisher.is_archived ? (
+                  <button
+                    onClick={() => {
+                      onRestore(fisher.id);
+                      onClose();
+                    }}
+                    className="px-3 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 rounded-xl text-xs font-extrabold cursor-pointer"
+                  >
+                    Restore
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      onArchive(fisher.id);
+                      onClose();
+                    }}
+                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Archive
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
       </div>

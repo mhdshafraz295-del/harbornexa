@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 import { getBlockHistory, releaseHold, blockFisherByNic, blockFisherByBoat, unblockBoat } from '../services/holdService';
 import { FisherDetailDrawer } from '../components/fishers/FisherDetailDrawer';
 import {
@@ -23,6 +24,9 @@ import {
 } from 'lucide-react';
 
 export const BlockHistoryPage = () => {
+  const { admin } = useAuth();
+  const isReadOnly = admin?.role?.toUpperCase() === 'CHECKER' || admin?.email?.toLowerCase() === 'alamanuser@gmail.com';
+
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -277,20 +281,24 @@ export const BlockHistoryPage = () => {
             <RefreshCw className={`w-3.5 h-3.5 text-[#F5B942] ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
-          <button
-            onClick={handleOpenNicBlockModal}
-            className="flex items-center gap-2 px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
-          >
-            <Ban className="w-3.5 h-3.5" />
-            <span>Block by NIC</span>
-          </button>
-          <button
-            onClick={handleOpenBoatBlockModal}
-            className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
-          >
-            <Ship className="w-3.5 h-3.5" />
-            <span>Block by Boat</span>
-          </button>
+          {!isReadOnly && (
+            <>
+              <button
+                onClick={handleOpenNicBlockModal}
+                className="flex items-center gap-2 px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+              >
+                <Ban className="w-3.5 h-3.5" />
+                <span>Block by NIC</span>
+              </button>
+              <button
+                onClick={handleOpenBoatBlockModal}
+                className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+              >
+                <Ship className="w-3.5 h-3.5" />
+                <span>Block by Boat</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -521,7 +529,7 @@ export const BlockHistoryPage = () => {
                     <th className="py-2.5 px-3.5">Status</th>
                     <th className="py-2.5 px-3.5">Release Details</th>
                     <th className="py-2.5 px-3.5">Created By</th>
-                    <th className="py-2.5 px-3.5 text-right">Actions</th>
+                    {!isReadOnly && <th className="py-2.5 px-3.5 text-right">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E5E7EB] text-xs">
@@ -629,39 +637,41 @@ export const BlockHistoryPage = () => {
                       </td>
 
                       {/* Action Buttons */}
-                      <td className="py-2.5 px-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1">
-                          {(item.block_type === 'MANUAL_HOLD' || item.block_type === 'BOAT_BLOCK') && item.hold_status === 'ACTIVE' && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenReleaseModal(item)}
-                              className="px-2.5 py-1 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] rounded-lg text-[11px] font-extrabold transition-all cursor-pointer shadow-2xs"
-                            >
-                              {item.block_type === 'BOAT_BLOCK' ? 'Unblock Boat' : 'Release Hold'}
-                            </button>
-                          )}
+                      {!isReadOnly && (
+                        <td className="py-2.5 px-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1">
+                            {(item.block_type === 'MANUAL_HOLD' || item.block_type === 'BOAT_BLOCK') && item.hold_status === 'ACTIVE' && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenReleaseModal(item)}
+                                className="px-2.5 py-1 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] rounded-lg text-[11px] font-extrabold transition-all cursor-pointer shadow-2xs"
+                              >
+                                {item.block_type === 'BOAT_BLOCK' ? 'Unblock Boat' : 'Release Hold'}
+                              </button>
+                            )}
 
-                          {item.block_type === 'DEBT_HOLD' && (
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/admin/debt-payments?search=${encodeURIComponent(item.custom_fisher_id)}`)}
-                              className="px-2.5 py-1 bg-white border border-[#E5E7EB] hover:bg-slate-50 text-[#111827] rounded-lg text-[11px] font-extrabold transition-all cursor-pointer"
-                            >
-                              View Debt
-                            </button>
-                          )}
+                            {item.block_type === 'DEBT_HOLD' && (
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/admin/debt-payments?search=${encodeURIComponent(item.custom_fisher_id)}`)}
+                                className="px-2.5 py-1 bg-white border border-[#E5E7EB] hover:bg-slate-50 text-[#111827] rounded-lg text-[11px] font-extrabold transition-all cursor-pointer"
+                              >
+                                View Debt
+                              </button>
+                            )}
 
-                          {item.block_type === 'ADMIN_BLOCK' && (
-                            <button
-                              type="button"
-                              onClick={() => handleViewFisherDetail(item.fisher_id, item.full_name, item.custom_fisher_id)}
-                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-[#111827] rounded-lg text-[11px] font-extrabold transition-all cursor-pointer"
-                            >
-                              Manage Fisher
-                            </button>
-                          )}
-                        </div>
-                      </td>
+                            {item.block_type === 'ADMIN_BLOCK' && (
+                              <button
+                                type="button"
+                                onClick={() => handleViewFisherDetail(item.fisher_id, item.full_name, item.custom_fisher_id)}
+                                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-[#111827] rounded-lg text-[11px] font-extrabold transition-all cursor-pointer"
+                              >
+                                Manage Fisher
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -721,27 +731,29 @@ export const BlockHistoryPage = () => {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-end pt-1" onClick={(e) => e.stopPropagation()}>
-                    {(item.block_type === 'MANUAL_HOLD' || item.block_type === 'BOAT_BLOCK') && item.hold_status === 'ACTIVE' && (
-                      <button
-                        type="button"
-                        onClick={() => handleOpenReleaseModal(item)}
-                        className="px-3 py-1.5 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] rounded-xl text-xs font-extrabold transition-all cursor-pointer"
-                      >
-                        {item.block_type === 'BOAT_BLOCK' ? 'Unblock Boat' : 'Release Hold'}
-                      </button>
-                    )}
+                  {!isReadOnly && (
+                    <div className="flex items-center justify-end pt-1" onClick={(e) => e.stopPropagation()}>
+                      {(item.block_type === 'MANUAL_HOLD' || item.block_type === 'BOAT_BLOCK') && item.hold_status === 'ACTIVE' && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReleaseModal(item)}
+                          className="px-3 py-1.5 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] rounded-xl text-xs font-extrabold transition-all cursor-pointer"
+                        >
+                          {item.block_type === 'BOAT_BLOCK' ? 'Unblock Boat' : 'Release Hold'}
+                        </button>
+                      )}
 
-                    {item.block_type === 'DEBT_HOLD' && (
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/admin/debt-payments?search=${encodeURIComponent(item.custom_fisher_id)}`)}
-                        className="px-3 py-1.5 bg-white border border-[#E5E7EB] text-[#111827] rounded-xl text-xs font-extrabold cursor-pointer"
-                      >
-                        View Debt
-                      </button>
-                    )}
-                  </div>
+                      {item.block_type === 'DEBT_HOLD' && (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/admin/debt-payments?search=${encodeURIComponent(item.custom_fisher_id)}`)}
+                          className="px-3 py-1.5 bg-white border border-[#E5E7EB] text-[#111827] rounded-xl text-xs font-extrabold cursor-pointer"
+                        >
+                          View Debt
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
