@@ -13,8 +13,10 @@ const login = async (req, res, next) => {
 
   try {
     const { email, password } = req.body;
+    console.log(`[AUTH] Login attempt for email: "${email}" from IP: ${ipAddress}`);
 
     if (!email || !password) {
+      console.warn(`[AUTH] Login failed: Missing email or password for "${email}"`);
       await logAudit({
         action: 'LOGIN_FAILED',
         ipAddress,
@@ -29,10 +31,11 @@ const login = async (req, res, next) => {
 
     // Query admin user by email using Prisma
     const admin = await prisma.admins.findUnique({
-      where: { email },
+      where: { email: email.trim().toLowerCase() },
     });
 
     if (!admin || !admin.password_hash) {
+      console.warn(`[AUTH] Login failed: Admin not found or no password hash for "${email}"`);
       await logAudit({
         action: 'LOGIN_FAILED',
         ipAddress,
@@ -47,6 +50,7 @@ const login = async (req, res, next) => {
 
     // Check account status
     if (admin.status !== 'ACTIVE') {
+      console.warn(`[AUTH] Login failed: Account inactive for "${email}"`);
       await logAudit({
         adminId: admin.id,
         action: 'LOGIN_FAILED',
@@ -65,11 +69,12 @@ const login = async (req, res, next) => {
     try {
       isPasswordValid = await bcrypt.compare(String(password), admin.password_hash);
     } catch (bErr) {
-      console.error('Password verification error:', bErr.message);
+      console.error('[AUTH] Password verification exception:', bErr.message);
       isPasswordValid = false;
     }
 
     if (!isPasswordValid) {
+      console.warn(`[AUTH] Login failed: Invalid password for "${email}"`);
       await logAudit({
         adminId: admin.id,
         action: 'LOGIN_FAILED',
@@ -104,6 +109,8 @@ const login = async (req, res, next) => {
       userAgent,
       metadata: { loginTime: now.toISOString() },
     });
+
+    console.log(`[AUTH] Login successful for "${email}" (role: ${admin.role})`);
 
     // Set secure httpOnly session cookie
     res.cookie('token', token, {

@@ -1,3 +1,5 @@
+const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -29,7 +31,12 @@ app.use(
 );
 
 // CORS configuration for credentials and httpOnly cookie transfer
-const allowedOrigins = [env.clientUrl, 'http://localhost:5173', 'http://127.0.0.1:5173'];
+const allowedOrigins = [
+  env.clientUrl,
+  'https://gregarious-transformation-production.up.railway.app',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+];
 
 app.use(
   cors({
@@ -76,7 +83,25 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Serve built frontend assets if present in client/dist
+const clientDistPath = path.join(__dirname, '../../client/dist');
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    const indexPath = path.join(clientDistPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      return res.sendFile(indexPath);
+    }
+    return next();
+  });
+}
+
 // Centralized Error Handler
 app.use(errorHandler);
 
 module.exports = app;
+
