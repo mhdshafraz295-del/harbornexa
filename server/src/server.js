@@ -72,37 +72,30 @@ async function ensureDefaultAdmins() {
 }
 
 async function startServer() {
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log('==================================================');
+    console.log(`VALACHCHENAI HARBOR SYSTEM - SERVER RUNNING`);
+    console.log(`Environment : ${env.nodeEnv}`);
+    console.log(`Port        : ${PORT}`);
+    console.log(`Client URL  : ${env.clientUrl}`);
+    console.log('==================================================');
+  });
+
+  server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`\n❌ FATAL ERROR: Port ${PORT} is already in use by another process.`);
+    } else {
+      console.error('❌ Server startup error:', error.message);
+    }
+  });
+
+  // Verify DB connection & seed admin accounts asynchronously after server opens port
   try {
-    // Verify DB Connection via Prisma Engine
     await prisma.$queryRaw`SELECT 1 + 1 AS result`;
     console.log('✔ Prisma Database Engine connected successfully.');
-
-    // Ensure assafa admin account is created and active
     await ensureDefaultAdmins();
-
-    const server = app.listen(PORT, () => {
-      console.log('==================================================');
-      console.log(`VALACHCHENAI HARBOR SYSTEM - SERVER RUNNING`);
-      console.log(`Environment : ${env.nodeEnv}`);
-      console.log(`Port        : ${PORT}`);
-      console.log(`Client URL  : ${env.clientUrl}`);
-      console.log('==================================================');
-    });
-
-    server.on('error', (error) => {
-      if (error.code === 'EADDRINUSE') {
-        console.error(`\n❌ FATAL ERROR: Port ${PORT} is already in use by another process.`);
-        console.error(`Please close the process listening on port ${PORT} or update PORT in server/.env.\n`);
-      } else {
-        console.error('❌ Server startup error:', error.message);
-      }
-      process.exit(1);
-    });
   } catch (error) {
-    console.error('❌ Failed to start server due to Database connection error:');
-    console.error(error.message);
-    console.error('Please ensure MySQL service is running on port 3306 and database migration has been run.');
-    process.exit(1);
+    console.warn('⚠️ Database initialization warning:', error.message);
   }
 }
 
