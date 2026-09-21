@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "build": "npm --prefix ../client install && npm --prefix ../client run build",
+    "build": "prisma generate",
     "migrate": "node src/scripts/migrate.js",
     "create-admin": "node src/scripts/createAdmin.js"
   },
