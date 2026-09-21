@@ -19,3 +19,8 @@ export const releaseHold = async (holdId, releaseNotes) => {
   const response = await api.post(`/holds/${holdId}/release`, { releaseNotes });
   return response.data;
 };
+
+export const blockFisherByNic = async (nic, notes) => {
+  const response = await api.post('/holds/block-by-nic', { nic, notes });
+  return response.data;
+};
