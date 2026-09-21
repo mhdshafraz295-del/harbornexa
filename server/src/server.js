@@ -20,9 +20,8 @@ async function ensureDefaultAdmins() {
       where: { email: adminEmail },
     });
 
-    const passwordHash = await bcrypt.hash(rawPass, 12);
-
     if (!existing) {
+      const passwordHash = await bcrypt.hash(rawPass, 10);
       await prisma.admins.create({
         data: {
           name: adminName,
@@ -33,16 +32,11 @@ async function ensureDefaultAdmins() {
         },
       });
       console.log(`✔ Admin account "${adminEmail}" (${adminName}) created successfully.`);
-    } else {
+    } else if (existing.status !== 'ACTIVE') {
       await prisma.admins.update({
         where: { email: adminEmail },
-        data: {
-          name: adminName,
-          password_hash: passwordHash,
-          status: 'ACTIVE',
-        },
+        data: { status: 'ACTIVE' },
       });
-      console.log(`✔ Admin account "${adminEmail}" (${adminName}) updated/verified.`);
     }
 
     // Seed 2: Restricted Checker Account
@@ -54,9 +48,8 @@ async function ensureDefaultAdmins() {
       where: { email: checkerEmail },
     });
 
-    const checkerPasswordHash = await bcrypt.hash(checkerRawPass, 12);
-
     if (!existingChecker) {
+      const checkerPasswordHash = await bcrypt.hash(checkerRawPass, 10);
       await prisma.admins.create({
         data: {
           name: checkerName,
@@ -67,32 +60,14 @@ async function ensureDefaultAdmins() {
         },
       });
       console.log(`✔ Checker account "${checkerEmail}" created successfully.`);
-    } else {
+    } else if (existingChecker.status !== 'ACTIVE') {
       await prisma.admins.update({
         where: { email: checkerEmail },
-        data: {
-          name: checkerName,
-          password_hash: checkerPasswordHash,
-          role: 'CHECKER',
-          status: 'ACTIVE',
-        },
+        data: { status: 'ACTIVE' },
       });
-      console.log(`✔ Checker account "${checkerEmail}" updated/verified.`);
     }
   } catch (err) {
     console.warn('Notice: Could not auto-seed admin account:', err.message);
-  }
-}
-
-/**
- * Ensures unique index `nic` on `fishers` table is dropped so multiple boat/owner block entries can exist per NIC
- */
-async function ensureNicIndexDropped() {
-  try {
-    await prisma.$executeRawUnsafe('ALTER TABLE fishers DROP INDEX nic');
-    console.log('✔ Unique index `nic` dropped from fishers table to allow multiple boat block entries.');
-  } catch (err) {
-    // Index already dropped or not present
   }
 }
 
@@ -101,9 +76,6 @@ async function startServer() {
     // Verify DB Connection via Prisma Engine
     await prisma.$queryRaw`SELECT 1 + 1 AS result`;
     console.log('✔ Prisma Database Engine connected successfully.');
-
-    // Ensure nic index is dropped
-    await ensureNicIndexDropped();
 
     // Ensure assafa admin account is created and active
     await ensureDefaultAdmins();

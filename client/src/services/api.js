@@ -6,7 +6,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000,
+  timeout: 45000,
 });
 
 // Response interceptor for handling 401 unauthenticated states
