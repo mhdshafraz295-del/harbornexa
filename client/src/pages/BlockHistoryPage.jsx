@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { getBlockHistory, releaseHold, blockFisherByNic, blockFisherByBoat } from '../services/holdService';
+import { getBlockHistory, releaseHold, blockFisherByNic, blockFisherByBoat, unblockBoat } from '../services/holdService';
 import { FisherDetailDrawer } from '../components/fishers/FisherDetailDrawer';
 import {
   Ban,
@@ -137,18 +137,22 @@ export const BlockHistoryPage = () => {
 
   const handleConfirmReleaseSubmit = async (e) => {
     e.preventDefault();
-    if (!releaseModalHold?.id || !releaseNotesInput.trim()) {
+    if (!releaseNotesInput.trim()) {
       alert('Please enter release notes.');
       return;
     }
     try {
       setReleasing(true);
-      await releaseHold(releaseModalHold.id, releaseNotesInput.trim());
+      if (releaseModalHold?.block_type === 'BOAT_BLOCK') {
+        await unblockBoat(releaseModalHold.boat_no, releaseNotesInput.trim());
+      } else {
+        await releaseHold(releaseModalHold.id, releaseNotesInput.trim());
+      }
       setReleaseModalHold(null);
       setReleaseNotesInput('');
       loadBlockHistoryData();
     } catch (err) {
-      alert(err.message || 'Failed to release manual hold.');
+      alert(err?.response?.data?.message || err.message || 'Failed to release hold/unblock boat.');
     } finally {
       setReleasing(false);
     }
@@ -627,13 +631,13 @@ export const BlockHistoryPage = () => {
                       {/* Action Buttons */}
                       <td className="py-2.5 px-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
-                          {item.block_type === 'MANUAL_HOLD' && item.hold_status === 'ACTIVE' && (
+                          {(item.block_type === 'MANUAL_HOLD' || item.block_type === 'BOAT_BLOCK') && item.hold_status === 'ACTIVE' && (
                             <button
                               type="button"
                               onClick={() => handleOpenReleaseModal(item)}
                               className="px-2.5 py-1 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] rounded-lg text-[11px] font-extrabold transition-all cursor-pointer shadow-2xs"
                             >
-                              Release Hold
+                              {item.block_type === 'BOAT_BLOCK' ? 'Unblock Boat' : 'Release Hold'}
                             </button>
                           )}
 
@@ -718,13 +722,13 @@ export const BlockHistoryPage = () => {
                   )}
 
                   <div className="flex items-center justify-end pt-1" onClick={(e) => e.stopPropagation()}>
-                    {item.block_type === 'MANUAL_HOLD' && item.hold_status === 'ACTIVE' && (
+                    {(item.block_type === 'MANUAL_HOLD' || item.block_type === 'BOAT_BLOCK') && item.hold_status === 'ACTIVE' && (
                       <button
                         type="button"
                         onClick={() => handleOpenReleaseModal(item)}
                         className="px-3 py-1.5 bg-[#FFD978] hover:bg-[#F5B942] text-[#111827] rounded-xl text-xs font-extrabold transition-all cursor-pointer"
                       >
-                        Release Hold
+                        {item.block_type === 'BOAT_BLOCK' ? 'Unblock Boat' : 'Release Hold'}
                       </button>
                     )}
 
@@ -801,7 +805,9 @@ export const BlockHistoryPage = () => {
             <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-3">
               <div className="flex items-center gap-2 text-emerald-700">
                 <ShieldCheck className="w-5 h-5" />
-                <h3 className="text-base font-extrabold text-[#111827]">Release Hold</h3>
+                <h3 className="text-base font-extrabold text-[#111827]">
+                  {releaseModalHold?.block_type === 'BOAT_BLOCK' ? 'Unblock Boat' : 'Release Hold'}
+                </h3>
               </div>
               <button
                 type="button"
@@ -813,10 +819,17 @@ export const BlockHistoryPage = () => {
             </div>
 
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-semibold">Fisher:</span>
-                <span className="font-extrabold text-[#111827]">{releaseModalHold.full_name}</span>
-              </div>
+              {releaseModalHold?.block_type === 'BOAT_BLOCK' ? (
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-semibold">Boat Number:</span>
+                  <span className="font-extrabold text-[#111827]">{releaseModalHold.boat_no}</span>
+                </div>
+              ) : (
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-semibold">Fisher:</span>
+                  <span className="font-extrabold text-[#111827]">{releaseModalHold.full_name}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-500 font-semibold">Reason:</span>
                 <span className="font-bold text-[#111827]">

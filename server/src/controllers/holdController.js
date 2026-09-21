@@ -702,6 +702,74 @@ const getBlockedBoats = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/holds/unblock-boat
+ * Release / unblock a directly blocked boat number
+ */
+const unblockBoat = async (req, res, next) => {
+  try {
+    const { boatNo, releaseNotes } = req.body;
+
+    if (!boatNo || !boatNo.trim()) {
+      return res.status(400).json({ success: false, message: 'Boat number is required.' });
+    }
+
+    const trimmedBoatNo = boatNo.trim().toUpperCase();
+
+    // Load existing blocked boats from settings table
+    const settingKey = 'blocked_boats_list';
+    const existing = await prisma.settings.findUnique({ where: { setting_key: settingKey } });
+    let blockedBoats = [];
+    try {
+      blockedBoats = existing ? JSON.parse(existing.setting_value || '[]') : [];
+    } catch (_) {
+      blockedBoats = [];
+    }
+
+    // Find active block for this boat
+    const blockIndex = blockedBoats.findIndex(
+      (b) => b.boat_no.toUpperCase() === trimmedBoatNo && !b.released_at
+    );
+
+    if (blockIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        message: `Boat "${trimmedBoatNo}" க்கு active block எதுவும் இல்லை.`,
+      });
+    }
+
+    // Mark as released
+    blockedBoats[blockIndex].released_at = new Date().toISOString();
+    blockedBoats[blockIndex].released_by_admin_id = req.admin?.id || 1;
+    blockedBoats[blockIndex].release_notes = releaseNotes ? releaseNotes.trim() : 'Unblocked by admin';
+
+    // Save back to settings
+    await prisma.settings.update({
+      where: { setting_key: settingKey },
+      data: { setting_value: JSON.stringify(blockedBoats), updated_at: new Date() },
+    });
+
+    await logAudit({
+      adminId: req.admin?.id || null,
+      action: 'BOAT_DIRECT_UNBLOCK',
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      metadata: {
+        boatNo: trimmedBoatNo,
+        releaseNotes: releaseNotes || null,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Boat "${trimmedBoatNo}" வெற்றிகரமாக unblock செய்யப்பட்டது!`,
+      boatNo: trimmedBoatNo,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createHold,
   releaseHold,
@@ -709,4 +777,5 @@ module.exports = {
   getBlockHistory,
   blockByNic,
   blockByBoat,
+  unblockBoat,
 };
