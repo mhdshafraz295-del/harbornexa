@@ -212,27 +212,23 @@ const createFisher = async (req, res, next) => {
     });
     if (existingNic) {
       if (validStatus === 'BLOCKED') {
-        // If status is BLOCKED, automatically add a new manual block/hold for this existing fisher!
+        // If status is BLOCKED, automatically add a new manual block/hold for this existing fisher
+        // WITHOUT overwriting original fisher details (boat_no, phone, address)!
         const createdHold = await prisma.fisher_holds.create({
           data: {
             fisher_id: existingNic.id,
             reason_code: 'MANAGEMENT_DECISION',
-            reason_text: notes ? `Manual Block – ${notes.trim()}` : 'Admin Block',
-            notes: notes ? notes.trim() : null,
+            reason_text: boat_no ? `Manual Block – Boat: ${boat_no.trim()}` : (notes ? `Manual Block – ${notes.trim()}` : 'Admin Block'),
+            notes: notes ? notes.trim() : (boat_no ? `Boat: ${boat_no.trim()}` : null),
             hold_date: new Date(),
             created_by_admin_id: req.admin?.id || 1,
           },
         });
 
-        // Also update fisher status to BLOCKED and update boat_no/phone/address if provided
-        const updateFields = { status: 'BLOCKED' };
-        if (boat_no) updateFields.boat_no = boat_no.trim();
-        if (phone) updateFields.phone = normalizedPhone;
-        if (address) updateFields.address = address.trim();
-
+        // Update ONLY status to BLOCKED if not already BLOCKED, preserving existing fisher details intact
         const updatedFisher = await prisma.fishers.update({
           where: { id: existingNic.id },
-          data: updateFields,
+          data: { status: 'BLOCKED' },
         });
 
         await logAudit({
@@ -246,12 +242,13 @@ const createFisher = async (req, res, next) => {
             fullName: existingNic.full_name,
             nic: normalizedNic,
             holdId: Number(createdHold.id),
+            blockBoatNo: boat_no ? boat_no.trim() : null,
           },
         });
 
         return res.status(200).json({
           success: true,
-          message: `"${existingNic.full_name}" (NIC: ${normalizedNic}) ஏற்கனவே உள்ள கணக்கில் புதிய Block வெற்றிகரமாக பதிவு செய்யப்பட்டது!`,
+          message: `"${existingNic.full_name}" (NIC: ${normalizedNic}) கணக்கில் புதிய Block வெற்றிகரமாக பதிவு செய்யப்பட்டது! பழைய விவரங்கள் மாற்றப்படவில்லை.`,
           fisher: mapFisherResponse(updatedFisher),
         });
       }
