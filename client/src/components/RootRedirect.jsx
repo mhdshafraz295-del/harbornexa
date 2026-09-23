@@ -23,7 +23,7 @@ export const RootRedirect = () => {
   if (isAuthenticated) {
     const isChecker = admin?.role?.toUpperCase() === 'CHECKER' || admin?.email?.toLowerCase() === 'alamanuser@gmail.com';
     if (isChecker) {
-      return <Navigate to="/admin/block-history" replace />;
+      return <Navigate to="/admin/qr-scanner" replace />;
     }
     return <Navigate to="/admin/dashboard" replace />;
   }

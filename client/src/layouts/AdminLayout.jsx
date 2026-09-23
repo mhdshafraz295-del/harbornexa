@@ -66,7 +66,7 @@ export const AdminLayout = () => {
   };
 
   const isChecker = admin?.role?.toUpperCase() === 'CHECKER' || admin?.email?.toLowerCase() === 'alamanuser@gmail.com';
-  const checkerAllowedPaths = ['/admin/block-history'];
+  const checkerAllowedPaths = ['/admin/qr-scanner', '/admin/departure-checker', '/admin/departure-pdf-checker', '/admin/block-history'];
 
   // Protect routes for CHECKER role: redirect away from forbidden pages to Block History
   useEffect(() => {
@@ -74,7 +74,7 @@ export const AdminLayout = () => {
       const currentPath = location.pathname;
       const isAllowed = checkerAllowedPaths.some((p) => currentPath.startsWith(p));
       if (!isAllowed) {
-        navigate('/admin/block-history', { replace: true });
+        navigate('/admin/qr-scanner', { replace: true });
       }
     }
   }, [isChecker, location.pathname, navigate]);
