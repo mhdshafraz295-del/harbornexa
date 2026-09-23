@@ -10,6 +10,12 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
 
+    allowedHosts: [
+      'alamansocietyvch.lk',
+      '.alamansocietyvch.lk',
+      'gregarious-transformation-production.up.railway.app',
+    ],
+
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
@@ -25,10 +31,8 @@ export default defineConfig({
 
     allowedHosts: [
       'alamansocietyvch.lk',
-      'www.alamansocietyvch.lk',
+      '.alamansocietyvch.lk',
       'gregarious-transformation-production.up.railway.app',
-      'localhost',
-      '127.0.0.1',
     ],
 
     proxy: {
