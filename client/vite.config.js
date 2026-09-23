@@ -2,13 +2,14 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+
   server: {
-    host: '0.0.0.0', // Explicitly bind to all IPv4 and IPv6 interfaces (0.0.0.0)
+    host: '0.0.0.0',
     port: 5173,
     strictPort: true,
+
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
@@ -17,12 +18,19 @@ export default defineConfig({
       },
     },
   },
+
   preview: {
+    host: '0.0.0.0',
+    port: 5173,
+
     allowedHosts: [
+      'alamansocietyvch.lk',
+      'www.alamansocietyvch.lk',
       'gregarious-transformation-production.up.railway.app',
       'localhost',
       '127.0.0.1',
     ],
+
     proxy: {
       '/api': {
         target: 'https://harbornexa-production.up.railway.app',
