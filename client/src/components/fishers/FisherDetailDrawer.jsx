@@ -292,7 +292,7 @@ export const FisherDetailDrawer = ({
               <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-[#E5E7EB]">
                 <div className="flex items-center gap-2 text-[#64748B]">
                   <Phone className="w-4 h-4 text-slate-400" />
-                  <span className="font-semibold">Phone:</span>
+                  <span className="font-semibold">Phone / Contact:</span>
                 </div>
                 <span className="font-extrabold">{fisher.phone || 'Not provided'}</span>
               </div>

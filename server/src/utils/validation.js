@@ -50,22 +50,22 @@ function normalizeSriLankanPhone(rawPhone) {
     return { isValid: true, normalizedPhone: null };
   }
 
-  // Remove spaces, dashes, dots, parentheses
-  const cleaned = rawPhone.trim().replace(/[\s\-\.\(\)]/g, '');
+  const trimmed = rawPhone.trim();
 
-  // Regex matching Sri Lankan numbers (local 07X/0XX or international +94/94)
+  // Remove spaces, dashes, dots, parentheses for standard SL phone check
+  const cleaned = trimmed.replace(/[\s\-\.\(\)]/g, '');
   const slPhoneRegex = /^(\+?94|0)?([1-9]\d{8})$/;
   const match = cleaned.match(slPhoneRegex);
 
   if (match) {
-    const subscriberNumber = match[2]; // 9 digits (e.g. 771234567 or 652221234)
+    const subscriberNumber = match[2];
     return { isValid: true, normalizedPhone: `+94${subscriberNumber}` };
   }
 
+  // If user entered name + phone (e.g. "SALMAN 0755999804" or "Owner: 0771234567"), allow it flexibly
   return {
-    isValid: false,
-    normalizedPhone: null,
-    error: 'Invalid Sri Lankan phone number. Example valid format: 0771234567 or +94771234567.',
+    isValid: true,
+    normalizedPhone: trimmed,
   };
 }
 

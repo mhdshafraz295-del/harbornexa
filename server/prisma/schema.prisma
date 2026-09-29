@@ -198,7 +198,7 @@ model fishers {
   fisher_id           String              @unique(map: "fisher_id") @db.VarChar(20)
   full_name           String              @db.VarChar(150)
   nic                 String              @db.VarChar(20)
-  phone               String?             @db.VarChar(20)
+  phone               String?             @db.VarChar(150)
   boat_no             String?             @db.VarChar(100)
   address             String?             @db.Text
   notes               String?             @db.Text

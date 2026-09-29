@@ -176,7 +176,7 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
 
             {/* Phone */}
             <div>
-              <label className="block text-xs font-bold text-[#111827] mb-1">Phone</label>
+              <label className="block text-xs font-bold text-[#111827] mb-1">Phone / Owner Contact</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                   <Phone className="w-4 h-4" />
@@ -186,7 +186,7 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
                   name="phone"
                   value={formData.phone}
                   onChange={handleChange}
-                  placeholder="e.g. 0771234567"
+                  placeholder="e.g. 0771234567 or SALMAN 0755999804"
                   className="w-full pl-9 pr-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-sm text-[#111827] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FFD978] focus:border-[#F5B942]"
                 />
               </div>

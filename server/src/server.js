@@ -97,6 +97,11 @@ async function startServer() {
   try {
     await prisma.$queryRaw`SELECT 1 + 1 AS result`;
     console.log('✔ Prisma Database Engine connected successfully.');
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE fishers MODIFY COLUMN phone VARCHAR(150) NULL;`);
+    } catch (e) {
+      // Ignored if already VARCHAR(150)
+    }
     await ensureDefaultAdmins();
   } catch (error) {
     console.warn('⚠️ Database initialization warning:', error.message);
