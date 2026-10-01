@@ -319,25 +319,52 @@ function getMockDepartureEmails() {
 
 let lastFetchCache = {
   timestamp: 0,
-  limit: 0,
+  timeframeKey: '',
   data: null,
 };
 
 /**
- * Fetches recent departure manifest emails from INBOX
+ * Fetches recent departure manifest emails from INBOX filtered by timeframe (24h default, 48h, 7d)
  */
-async function fetchDepartureEmails({ limit = 50, force = false } = {}) {
+async function fetchDepartureEmails({ timeframe = '24h', limit = null, force = false } = {}) {
+  const cacheKey = `${timeframe}_${limit || 'none'}`;
+
   // If not force-refreshing, return in-memory cached results within 45 seconds for high performance
-  if (!force && lastFetchCache.data && lastFetchCache.limit >= limit && Date.now() - lastFetchCache.timestamp < 45000) {
+  if (!force && lastFetchCache.data && lastFetchCache.timeframeKey === cacheKey && Date.now() - lastFetchCache.timestamp < 45000) {
     return lastFetchCache.data;
+  }
+
+  // Calculate cutoff timestamp
+  let cutoffTimestamp = 0;
+  let maxScanCount = 100;
+
+  if (timeframe === '24h') {
+    cutoffTimestamp = Date.now() - 24 * 60 * 60 * 1000;
+    maxScanCount = 120;
+  } else if (timeframe === '48h') {
+    cutoffTimestamp = Date.now() - 48 * 60 * 60 * 1000;
+    maxScanCount = 200;
+  } else if (timeframe === '7d') {
+    cutoffTimestamp = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    maxScanCount = 350;
+  } else if (limit) {
+    maxScanCount = Math.min(200, Math.max(10, limit));
+  } else {
+    maxScanCount = 50;
   }
 
   // If credentials are not set, return mock demo emails with configured=false flag
   if (!env.email.user || !env.email.pass) {
+    const allMocks = getMockDepartureEmails();
+    const filteredMocks = cutoffTimestamp > 0
+      ? allMocks.filter((e) => new Date(e.date).getTime() >= cutoffTimestamp)
+      : allMocks.slice(0, limit || 50);
+
     return {
       configured: false,
       message: 'Email credentials not set. Showing live preview / demo emails.',
-      emails: getMockDepartureEmails(),
+      timeframe,
+      emails: filteredMocks.length > 0 ? filteredMocks : allMocks.slice(0, 5),
     };
   }
 
@@ -356,8 +383,8 @@ async function fetchDepartureEmails({ limit = 50, force = false } = {}) {
         return { configured: true, emails: [] };
       }
 
-      // Calculate sequence range for latest messages
-      const fetchStart = Math.max(1, totalMessages - limit + 1);
+      // Calculate sequence range for latest messages to scan
+      const fetchStart = Math.max(1, totalMessages - maxScanCount + 1);
       const seqRange = `${fetchStart}:${totalMessages}`;
 
       // Fetch messages
@@ -369,6 +396,13 @@ async function fetchDepartureEmails({ limit = 50, force = false } = {}) {
         try {
           // Parse message source using mailparser
           const parsed = await simpleParser(message.source);
+
+          const emailDate = parsed.date ? new Date(parsed.date) : new Date();
+
+          // Apply timeframe cutoff filter if specified
+          if (cutoffTimestamp > 0 && emailDate.getTime() < cutoffTimestamp) {
+            continue; // Skip emails older than the requested timeframe
+          }
 
           const pdfAttachments = (parsed.attachments || []).filter(
             (att) =>
@@ -405,7 +439,7 @@ async function fetchDepartureEmails({ limit = 50, force = false } = {}) {
             subject: parsed.subject || '(No Subject)',
             from: fromValue ? fromValue.address : fromText,
             fromName: fromValue ? fromValue.name || fromValue.address : fromText,
-            date: parsed.date ? parsed.date.toISOString() : new Date().toISOString(),
+            date: emailDate.toISOString(),
             preview: (parsed.text || '').substring(0, 160).replace(/\s+/g, ' ').trim(),
             hasPdf: attachmentList.length > 0,
             attachments: attachmentList,
@@ -422,12 +456,13 @@ async function fetchDepartureEmails({ limit = 50, force = false } = {}) {
 
     const result = {
       configured: true,
+      timeframe,
       count: emails.length,
       emails,
     };
     lastFetchCache = {
       timestamp: Date.now(),
-      limit,
+      timeframeKey: cacheKey,
       data: result,
     };
     return result;
@@ -436,6 +471,7 @@ async function fetchDepartureEmails({ limit = 50, force = false } = {}) {
     // Return mock emails as fallback with error note
     return {
       configured: true,
+      timeframe,
       error: error.message,
       message: `Failed to fetch from mail server: ${error.message}. Showing demo manifest list.`,
       emails: getMockDepartureEmails(),

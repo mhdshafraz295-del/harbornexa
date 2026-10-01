@@ -5,9 +5,10 @@ const emailService = require('../services/emailService');
  */
 async function getEmailManifests(req, res, next) {
   try {
-    const limit = parseInt(req.query.limit || '50', 10);
+    const timeframe = req.query.timeframe || (req.query.limit ? null : '24h');
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : null;
     const force = req.query.force === 'true';
-    const result = await emailService.fetchDepartureEmails({ limit, force });
+    const result = await emailService.fetchDepartureEmails({ timeframe, limit, force });
     return res.status(200).json({
       success: true,
       ...result,

@@ -206,11 +206,13 @@ export const FALLBACK_EMAILS = [
 /**
  * Fetches recent departure manifest emails with attached PDFs
  */
-export const getEmailManifests = async (limit = 50, force = false) => {
+export const getEmailManifests = async (timeframe = '24h', force = false) => {
   try {
-    const url = `/email/manifests?limit=${limit}${force ? '&force=true' : ''}`;
+    const isNumeric = !isNaN(Number(timeframe));
+    const param = isNumeric ? `limit=${timeframe}` : `timeframe=${timeframe}`;
+    const url = `/email/manifests?${param}${force ? '&force=true' : ''}`;
     const response = await api.get(url);
-    if (response.data && Array.isArray(response.data.emails) && response.data.emails.length > 0) {
+    if (response.data && Array.isArray(response.data.emails)) {
       return response.data;
     }
     return {

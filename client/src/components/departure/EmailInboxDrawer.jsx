@@ -49,14 +49,14 @@ export const EmailInboxDrawer = ({
   const [expandedEmailId, setExpandedEmailId] = useState(null);
   const [showSetupGuide, setShowSetupGuide] = useState(false);
   const [addedIds, setAddedIds] = useState(new Set());
-  const [fetchLimit, setFetchLimit] = useState(50);
+  const [timeframe, setTimeframe] = useState('24h');
 
-  const fetchEmails = async (isForce = false, limitOverride = null) => {
+  const fetchEmails = async (isForce = false, timeframeOverride = null) => {
     try {
       setIsLoading(true);
       setStatusMessage('');
-      const targetLimit = limitOverride || fetchLimit;
-      const data = await getEmailManifests(targetLimit, isForce);
+      const targetTimeframe = timeframeOverride || timeframe;
+      const data = await getEmailManifests(targetTimeframe, isForce);
       setEmails(data.emails || []);
       setIsConfigured(Boolean(data.configured));
       if (data.message) {
@@ -285,22 +285,22 @@ export const EmailInboxDrawer = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
-          {/* Email Limit Dropdown */}
+          {/* Email Timeframe Dropdown */}
           <select
-            value={fetchLimit}
+            value={timeframe}
             onChange={(e) => {
-              const newLimit = parseInt(e.target.value, 10);
-              setFetchLimit(newLimit);
-              fetchEmails(true, newLimit);
+              const newTimeframe = e.target.value;
+              setTimeframe(newTimeframe);
+              fetchEmails(true, newTimeframe);
             }}
             disabled={isLoading || isProcessingParent}
             className="px-2.5 py-1.5 rounded-xl border border-[#E5E7EB] hover:bg-[#F5F6F8] text-[#111827] text-xs font-bold transition-colors cursor-pointer bg-white"
-            title="Number of emails to load"
+            title="Select email time range"
           >
-            <option value="25">25 Mails</option>
-            <option value="50">50 Mails (Default)</option>
-            <option value="75">75 Mails</option>
-            <option value="100">100 Mails</option>
+            <option value="24h">Last 24 Hours (Default)</option>
+            <option value="48h">Last 48 Hours</option>
+            <option value="7d">Last 7 Days</option>
+            <option value="50">All Recent (50 Mails)</option>
           </select>
 
           <button
