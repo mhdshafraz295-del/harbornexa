@@ -193,6 +193,22 @@ export const DepartureCheckerPage = () => {
       const badgeColor = isApproved ? '#059669' : isBlc ? '#DC2626' : '#D97706';
       const badgeText = isApproved ? 'APPROVED / NOT BLC' : isBlc ? 'BLC / BLOCKED' : 'NOT FOUND';
 
+      let reasonDetailsStr = r.details || '—';
+      if (r.reasons && r.reasons.length > 0) {
+        const formattedReasons = r.reasons.map((rsn) => {
+          let label = rsn.label || '';
+          if (rsn.amount) label += ` (Rs. ${rsn.amount})`;
+          if (rsn.notes && !label.includes(rsn.notes)) label += ` [${rsn.notes}]`;
+          return label;
+        }).join('; ');
+        reasonDetailsStr = `${reasonDetailsStr} • Reason: ${formattedReasons}`;
+      }
+      const ownerInfo = r.ownerContact || r.phone;
+      if (isBlc && (r.boatNo || ownerInfo)) {
+        const extra = [r.boatNo ? `Boat: ${r.boatNo}` : '', ownerInfo ? `Owner/Contact: ${ownerInfo}` : ''].filter(Boolean).join(' | ');
+        if (extra) reasonDetailsStr += ` (${extra})`;
+      }
+
       return `
         <tr style="border-bottom: 1px solid #E2E8F0;">
           <td style="padding: 8px 10px; font-family: monospace; font-weight: 700;">${r.nic || '—'}</td>
@@ -200,7 +216,7 @@ export const DepartureCheckerPage = () => {
           <td style="padding: 8px 10px; font-weight: 700;">${r.fisherName || '—'}</td>
           <td style="padding: 8px 10px;">${r.boatNo || '—'}</td>
           <td style="padding: 8px 10px;"><span style="color: ${badgeColor}; font-weight: 800; font-size: 11px;">${badgeText}</span></td>
-          <td style="padding: 8px 10px; font-size: 11px;">${r.details || '—'}</td>
+          <td style="padding: 8px 10px; font-size: 11px;">${reasonDetailsStr}</td>
         </tr>
       `;
     }).join('');
@@ -732,11 +748,26 @@ export const DepartureCheckerPage = () => {
                                     {r.reasons?.map((rsn, rsnIdx) => (
                                       <div
                                         key={rsnIdx}
-                                        className="text-[11px] text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200 font-bold inline-block mr-1"
+                                        className="text-[11px] text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200 font-bold inline-block mr-1 mb-1"
                                       >
                                         Reason: {rsn.label} {rsn.amount ? `(Rs. ${rsn.amount})` : ''}
+                                        {rsn.notes && !rsn.label.includes(rsn.notes) ? ` — ${rsn.notes}` : ''}
                                       </div>
                                     ))}
+                                    {isBlc && (r.boatNo || r.ownerContact || r.phone) && (
+                                      <div className="text-[10px] text-slate-600 font-bold flex items-center gap-1.5 flex-wrap mt-0.5">
+                                        {r.boatNo && (
+                                          <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                            Boat: {r.boatNo}
+                                          </span>
+                                        )}
+                                        {(r.ownerContact || r.phone) && (
+                                          <span className="bg-[#FFF7D6] text-[#B45309] px-1.5 py-0.5 rounded border border-[#FFD978]">
+                                            Owner / Contact: {r.ownerContact || r.phone}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 </td>
                               </tr>

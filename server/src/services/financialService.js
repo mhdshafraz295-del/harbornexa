@@ -124,6 +124,9 @@ const getFisherClearanceStatus = async (fisherId, dbClient = prisma) => {
       id: true,
       fisher_id: true,
       full_name: true,
+      boat_no: true,
+      phone: true,
+      notes: true,
       status: true,
       is_archived: true,
     },
@@ -217,34 +220,43 @@ const getFisherClearanceStatus = async (fisherId, dbClient = prisma) => {
 
   // Add Base Blocked reason if base status is BLOCKED
   if (fisher.status === 'BLOCKED') {
+    const baseBlockedLabel = fisher.notes
+      ? `Manual Block – ${fisher.notes}`
+      : (fisher.boat_no ? `Manual Block – Boat: ${fisher.boat_no}` : 'Manual Block – reason not recorded');
     reasons.push({
       code: 'BASE_BLOCKED',
-      label: 'Manual Block – reason not recorded',
+      label: baseBlockedLabel,
+      notes: fisher.notes || null,
+      boatNo: fisher.boat_no || null,
     });
   }
 
   // Add all active manual hold reasons
   for (const h of activeHolds) {
-    let label = 'Manual Hold';
+    let label = 'Management Decision';
+    const detailText = h.reason_text || h.notes || '';
     switch (h.reason_code) {
       case 'PAYMENT_ISSUE':
-        label = 'Payment Issue';
+        label = detailText ? `Payment Issue (${detailText})` : 'Payment Issue';
         break;
       case 'DOCUMENT_ISSUE':
-        label = 'Document Issue';
+        label = detailText ? `Document Issue (${detailText})` : 'Document Issue';
         break;
       case 'MANAGEMENT_DECISION':
-        label = 'Management Decision';
+        label = detailText ? `Management Decision (${detailText})` : 'Management Decision';
         break;
       case 'OTHER':
-        label = h.reason_text || 'Other Manual Hold Reason';
+        label = detailText || 'Other Manual Hold Reason';
         break;
+      default:
+        label = detailText || h.reason_code;
     }
     reasons.push({
       code: h.reason_code,
       label,
       holdId: Number(h.id),
-      notes: h.notes,
+      reasonText: h.reason_text || null,
+      notes: h.notes || null,
       holdDate: h.hold_date,
     });
   }

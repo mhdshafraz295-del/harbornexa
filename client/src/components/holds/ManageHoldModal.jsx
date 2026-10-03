@@ -242,21 +242,19 @@ export const ManageHoldModal = ({ isOpen, onClose, fisher, onHoldUpdated, onSucc
                 </select>
               </div>
 
-              {createForm.reasonCode === 'OTHER' && (
-                <div>
-                  <label className="block text-xs font-bold text-[#111827] mb-1">
-                    Reason Details <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={createForm.reasonText}
-                    onChange={(e) => setCreateForm({ ...createForm, reasonText: e.target.value })}
-                    placeholder="Enter specific reason..."
-                    className="w-full px-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FFD978]"
-                  />
-                </div>
-              )}
+              <div>
+                <label className="block text-xs font-bold text-[#111827] mb-1">
+                  Reason Details / Owner &amp; Boat {createForm.reasonCode === 'OTHER' && <span className="text-red-500">*</span>}
+                </label>
+                <input
+                  type="text"
+                  required={createForm.reasonCode === 'OTHER'}
+                  value={createForm.reasonText}
+                  onChange={(e) => setCreateForm({ ...createForm, reasonText: e.target.value })}
+                  placeholder="e.g. Boat: IMULA0037NBO / Owner: Salman (0755999804)"
+                  className="w-full px-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-xs text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#FFD978]"
+                />
+              </div>
 
               <div>
                 <label className="block text-xs font-bold text-[#111827] mb-1">Notes</label>
