@@ -109,107 +109,61 @@ const getFisherFinancialSummary = async (fisherId, dbClient = prisma) => {
  * @param {Object} [dbClient] Optional Prisma Client or Transaction Client
  * @returns {Promise<{ status: string, canProceed: boolean, debtHold: boolean, manualHold: boolean, outstandingDebt: string, reasons: Array }>}
  */
-const getFisherClearanceStatus = async (fisherId, dbClient = prisma) => {
-  const client = (dbClient && dbClient.fishers) ? dbClient : prisma;
-  const isNumeric = !isNaN(Number(fisherId));
+const CLEARANCE_FISHER_SELECT = {
+  id: true,
+  fisher_id: true,
+  full_name: true,
+  boat_no: true,
+  phone: true,
+  notes: true,
+  status: true,
+  is_archived: true,
+};
 
-  const whereCondition = isNumeric
-    ? { OR: [{ id: BigInt(fisherId) }, { fisher_id: String(fisherId) }] }
-    : { fisher_id: String(fisherId) };
+const buildNotEligible = (code, label) => ({
+  status: 'NOT_ELIGIBLE',
+  canProceed: false,
+  debtHold: false,
+  manualHold: false,
+  outstandingDebt: '0.00',
+  reasons: [{ code, label }],
+});
 
-  // 1. Query Fisher base status & archived flag via Prisma / Transaction Client
-  const fisher = await client.fishers.findFirst({
-    where: whereCondition,
-    select: {
-      id: true,
-      fisher_id: true,
-      full_name: true,
-      boat_no: true,
-      phone: true,
-      notes: true,
-      status: true,
-      is_archived: true,
-    },
-  });
-
+/**
+ * Pure (no DB access) clearance evaluation. Shared by the single-fisher and the
+ * bulk code paths so both always produce identical results.
+ */
+const evaluateFisherClearance = ({
+  fisher,
+  activeHolds = [],
+  nonCancelledDebts = [],
+  allDebtPayments = [],
+  activeOrCompletedPlans = [],
+}) => {
   if (!fisher) {
-    return {
-      status: 'NOT_ELIGIBLE',
-      canProceed: false,
-      debtHold: false,
-      manualHold: false,
-      outstandingDebt: '0.00',
-      reasons: [{ code: 'NOT_FOUND', label: 'Fisher record not found' }],
-    };
+    return buildNotEligible('NOT_FOUND', 'Fisher record not found');
   }
-
-  const realFisherId = fisher.id;
 
   if (fisher.is_archived) {
-    return {
-      status: 'NOT_ELIGIBLE',
-      canProceed: false,
-      debtHold: false,
-      manualHold: false,
-      outstandingDebt: '0.00',
-      reasons: [{ code: 'ARCHIVED', label: 'Fisher record is archived' }],
-    };
+    return buildNotEligible('ARCHIVED', 'Fisher record is archived');
   }
 
-  // 2. Query active manual holds via Prisma / Transaction Client
-  const activeHolds = await client.fisher_holds.findMany({
-    where: {
-      fisher_id: realFisherId,
-      released_at: null,
-    },
-    orderBy: { id: 'asc' },
-    select: {
-      id: true,
-      reason_code: true,
-      reason_text: true,
-      notes: true,
-      hold_date: true,
-    },
-  });
-
-  // 3. Financial summary
-  const summary = await getFisherFinancialSummary(realFisherId, client);
-
-  // 4. Per-debt installment plan evaluation
-  const nonCancelledDebts = await client.fisher_debts.findMany({
-    where: {
-      fisher_id: realFisherId,
-      status: { not: 'CANCELLED' },
-    },
-    select: {
-      id: true,
-      original_amount: true,
-    },
-  });
-
-  const allDebtPayments = await client.debt_payments.findMany({
-    where: {
-      fisher_id: realFisherId,
-    },
-    select: {
-      id: true,
-      debt_id: true,
-      amount: true,
-      reversed_at: true,
-    },
-  });
-
-  const activeOrCompletedPlans = await client.installment_plans.findMany({
-    where: {
-      fisher_id: realFisherId,
-      status: { in: ['ACTIVE', 'COMPLETED'] },
-    },
-    include: {
-      installment_dues: {
-        orderBy: { installment_number: 'asc' },
-      },
-    },
-  });
+  // Financial summary (same rules as getFisherFinancialSummary)
+  let totalDebt = new Decimal(0);
+  for (const d of nonCancelledDebts) {
+    totalDebt = totalDebt.plus(new Decimal(d.original_amount ? d.original_amount.toString() : 0));
+  }
+  let totalPaid = new Decimal(0);
+  for (const p of allDebtPayments) {
+    if (p.reversed_at == null) {
+      totalPaid = totalPaid.plus(new Decimal(p.amount ? p.amount.toString() : 0));
+    }
+  }
+  let outstanding = totalDebt.minus(totalPaid);
+  if (outstanding.isNegative()) {
+    outstanding = new Decimal(0);
+  }
+  const outstandingDebt = outstanding.toFixed(2);
 
   const planMap = new Map();
   for (const plan of activeOrCompletedPlans) {
@@ -331,7 +285,7 @@ const getFisherClearanceStatus = async (fisherId, dbClient = prisma) => {
       canProceed: false,
       debtHold: debtHoldTriggered,
       manualHold: hasManualHold,
-      outstandingDebt: summary.outstandingDebt,
+      outstandingDebt,
       reasons,
     };
   }
@@ -342,7 +296,7 @@ const getFisherClearanceStatus = async (fisherId, dbClient = prisma) => {
       canProceed: false,
       debtHold: false,
       manualHold: false,
-      outstandingDebt: summary.outstandingDebt,
+      outstandingDebt,
       reasons: [{ code: 'PENDING_VERIFICATION', label: 'Identity Pending Verification' }],
     };
   }
@@ -352,12 +306,155 @@ const getFisherClearanceStatus = async (fisherId, dbClient = prisma) => {
     canProceed: true,
     debtHold: false,
     manualHold: false,
-    outstandingDebt: summary.outstandingDebt,
+    outstandingDebt,
     reasons: [],
   };
+};
+
+/**
+ * Loads the related rows needed to evaluate clearance for one or many fishers.
+ * `fisherIdFilter` is either a single BigInt or `{ in: [...] }`.
+ * Queries run in parallel on the shared client; sequentially inside a transaction client.
+ */
+const loadClearanceData = async (client, fisherIdFilter) => {
+  const loaders = [
+    () => client.fisher_holds.findMany({
+      where: { fisher_id: fisherIdFilter, released_at: null },
+      orderBy: { id: 'asc' },
+      select: {
+        id: true,
+        fisher_id: true,
+        reason_code: true,
+        reason_text: true,
+        notes: true,
+        hold_date: true,
+      },
+    }),
+    () => client.fisher_debts.findMany({
+      where: { fisher_id: fisherIdFilter, status: { not: 'CANCELLED' } },
+      select: { id: true, fisher_id: true, original_amount: true },
+    }),
+    () => client.debt_payments.findMany({
+      where: { fisher_id: fisherIdFilter },
+      select: { id: true, fisher_id: true, debt_id: true, amount: true, reversed_at: true },
+    }),
+    () => client.installment_plans.findMany({
+      where: { fisher_id: fisherIdFilter, status: { in: ['ACTIVE', 'COMPLETED'] } },
+      include: { installment_dues: { orderBy: { installment_number: 'asc' } } },
+    }),
+  ];
+
+  if (client === prisma) {
+    const [activeHolds, nonCancelledDebts, allDebtPayments, activeOrCompletedPlans] =
+      await Promise.all(loaders.map((load) => load()));
+    return { activeHolds, nonCancelledDebts, allDebtPayments, activeOrCompletedPlans };
+  }
+
+  const activeHolds = await loaders[0]();
+  const nonCancelledDebts = await loaders[1]();
+  const allDebtPayments = await loaders[2]();
+  const activeOrCompletedPlans = await loaders[3]();
+  return { activeHolds, nonCancelledDebts, allDebtPayments, activeOrCompletedPlans };
+};
+
+const groupByFisher = (rows) => {
+  const map = new Map();
+  for (const row of rows) {
+    const key = String(row.fisher_id);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(row);
+  }
+  return map;
+};
+
+const getFisherClearanceStatus = async (fisherId, dbClient = prisma) => {
+  const client = (dbClient && dbClient.fishers) ? dbClient : prisma;
+  const isNumeric = !isNaN(Number(fisherId));
+
+  const whereCondition = isNumeric
+    ? { OR: [{ id: BigInt(fisherId) }, { fisher_id: String(fisherId) }] }
+    : { fisher_id: String(fisherId) };
+
+  // 1. Query Fisher base status & archived flag via Prisma / Transaction Client
+  const fisher = await client.fishers.findFirst({
+    where: whereCondition,
+    select: CLEARANCE_FISHER_SELECT,
+  });
+
+  if (!fisher || fisher.is_archived) {
+    return evaluateFisherClearance({ fisher });
+  }
+
+  const data = await loadClearanceData(client, fisher.id);
+  return evaluateFisherClearance({ fisher, ...data });
+};
+
+const BULK_CHUNK_SIZE = 2000;
+
+/**
+ * Batched version of getFisherClearanceStatus: evaluates many fishers with a
+ * constant number of queries instead of ~6 queries per fisher.
+ *
+ * @param {Array<number|string|bigint>} fisherIds internal numeric fisher ids
+ * @param {Object} [dbClient] Optional Prisma Client or Transaction Client
+ * @returns {Promise<Map<string, Object>>} Map keyed by String(fisher.id) -> clearance result
+ */
+const getBulkFisherClearanceStatuses = async (fisherIds, dbClient = prisma) => {
+  const client = (dbClient && dbClient.fishers) ? dbClient : prisma;
+  const uniqueIds = Array.from(new Set((fisherIds || []).map((id) => String(id)))).map((id) => BigInt(id));
+  const results = new Map();
+
+  for (let i = 0; i < uniqueIds.length; i += BULK_CHUNK_SIZE) {
+    const chunk = uniqueIds.slice(i, i + BULK_CHUNK_SIZE);
+
+    const fishers = await client.fishers.findMany({
+      where: { id: { in: chunk } },
+      select: CLEARANCE_FISHER_SELECT,
+    });
+
+    const liveIds = fishers.filter((f) => !f.is_archived).map((f) => f.id);
+
+    let holdsBy = new Map();
+    let debtsBy = new Map();
+    let paymentsBy = new Map();
+    let plansBy = new Map();
+
+    if (liveIds.length > 0) {
+      const data = await loadClearanceData(client, { in: liveIds });
+      holdsBy = groupByFisher(data.activeHolds);
+      debtsBy = groupByFisher(data.nonCancelledDebts);
+      paymentsBy = groupByFisher(data.allDebtPayments);
+      plansBy = groupByFisher(data.activeOrCompletedPlans);
+    }
+
+    for (const fisher of fishers) {
+      const key = String(fisher.id);
+      results.set(
+        key,
+        evaluateFisherClearance({
+          fisher,
+          activeHolds: holdsBy.get(key) || [],
+          nonCancelledDebts: debtsBy.get(key) || [],
+          allDebtPayments: paymentsBy.get(key) || [],
+          activeOrCompletedPlans: plansBy.get(key) || [],
+        })
+      );
+    }
+  }
+
+  // Ids that do not exist at all
+  for (const id of uniqueIds) {
+    const key = String(id);
+    if (!results.has(key)) {
+      results.set(key, evaluateFisherClearance({ fisher: null }));
+    }
+  }
+
+  return results;
 };
 
 module.exports = {
   getFisherFinancialSummary,
   getFisherClearanceStatus,
+  getBulkFisherClearanceStatuses,
 };

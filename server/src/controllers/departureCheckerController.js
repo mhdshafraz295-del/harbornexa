@@ -16,7 +16,7 @@ const pdfParse = require('pdf-parse');
 const { createCanvas } = require('@napi-rs/canvas');
 const { createWorker } = require('tesseract.js');
 const prisma = require('../config/prismaClient');
-const { getFisherClearanceStatus } = require('../services/financialService');
+const { getBulkFisherClearanceStatuses } = require('../services/financialService');
 
 // Polyfill DOMMatrix for PDF processing on modern Node environments if missing
 if (typeof global.DOMMatrix === 'undefined') {
@@ -556,9 +556,27 @@ const checkDeparturePdfs = async (req, res, next) => {
     fisherMap.forEach((f) => allFishersToCache.set(String(f.id), f));
     boatFisherMap.forEach((f) => allFishersToCache.set(String(f.id), f));
 
+    // Batched: ONE clearance evaluation + ONE holds query for all fishers in this upload
+    const cacheFisherIds = Array.from(allFishersToCache.values()).map((f) => f.id);
+    const bulkClearance = await getBulkFisherClearanceStatuses(cacheFisherIds);
+    const allActiveHolds = cacheFisherIds.length > 0
+      ? await prisma.fisher_holds.findMany({
+          where: { fisher_id: { in: cacheFisherIds }, released_at: null },
+          select: { fisher_id: true, reason_code: true, reason_text: true, hold_date: true },
+          orderBy: { id: 'desc' },
+        })
+      : [];
+    const holdsByFisher = new Map();
+    for (const h of allActiveHolds) {
+      const key = String(h.fisher_id);
+      if (!holdsByFisher.has(key)) holdsByFisher.set(key, []);
+      holdsByFisher.get(key).push(h);
+    }
+
     for (const fisher of allFishersToCache.values()) {
-      if (clearanceCache.has(String(fisher.id))) continue; // already cached
-      const clearanceResult = await getFisherClearanceStatus(fisher.id);
+      const fisherKey = String(fisher.id);
+      if (clearanceCache.has(fisherKey)) continue; // already cached
+      const clearanceResult = bulkClearance.get(fisherKey) || { status: 'NOT_ELIGIBLE', reasons: [] };
       let outcome = 'NOT_FOUND';
       if (clearanceResult.status === 'CLEARED') {
         outcome = 'APPROVED';
@@ -568,12 +586,8 @@ const checkDeparturePdfs = async (req, res, next) => {
         outcome = 'PENDING';
       }
 
-      // Fetch active holds for detailed block reason display in PDF results
-      const activeHolds = await prisma.fisher_holds.findMany({
-        where: { fisher_id: fisher.id, released_at: null },
-        select: { reason_code: true, reason_text: true, hold_date: true },
-        orderBy: { id: 'desc' },
-      });
+      // Active holds for detailed block reason display in PDF results
+      const activeHolds = holdsByFisher.get(fisherKey) || [];
 
       const blockReasons = activeHolds.map((h) => {
         if (h.reason_text && h.reason_text.includes('NIC Block')) return { type: 'NIC_BLOCK', label: `NIC மூலம் Block – ${h.reason_text}` };
@@ -583,7 +597,7 @@ const checkDeparturePdfs = async (req, res, next) => {
         return { type: 'MANUAL', label: h.reason_text || 'Manual Hold' };
       });
 
-      clearanceCache.set(String(fisher.id), { clearanceResult, outcome, blockReasons });
+      clearanceCache.set(fisherKey, { clearanceResult, outcome, blockReasons });
     }
 
     // Step 3: Map EVERY extracted NIC to result list (including NOT_FOUND)

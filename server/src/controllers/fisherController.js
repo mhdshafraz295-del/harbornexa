@@ -32,7 +32,7 @@ const getFishers = async (req, res, next) => {
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 25));
 
-    const { getFisherClearanceStatus } = require('../services/financialService');
+    const { getBulkFisherClearanceStatuses } = require('../services/financialService');
 
     // 1. Build archive & search conditions for Prisma findMany
     const whereConditions = {};
@@ -60,18 +60,25 @@ const getFishers = async (req, res, next) => {
       orderBy: { id: 'desc' },
     });
 
-    // Enrich items with effective clearance status without mutating base status
-    const enrichedItems = await Promise.all(
-      rawItems.map(async (rawItem) => {
-        const item = mapFisherResponse(rawItem);
-        const clearance = await getFisherClearanceStatus(item.id);
-        return {
-          ...item,
-          effectiveStatus: clearance.status, // 'CLEARED' | 'HOLD' | 'PENDING' | 'NOT_ELIGIBLE'
-          clearanceDetails: clearance,
-        };
-      })
+    // 3. Lightweight list of all fishers (for global counts) + ONE batched clearance
+    //    evaluation instead of ~6 DB queries per fisher (twice).
+    const allFishersForCounts = await prisma.fishers.findMany({
+      select: { id: true, is_archived: true },
+    });
+    const clearanceMap = await getBulkFisherClearanceStatuses(
+      allFishersForCounts.map((f) => f.id)
     );
+
+    // Enrich items with effective clearance status without mutating base status
+    const enrichedItems = rawItems.map((rawItem) => {
+      const item = mapFisherResponse(rawItem);
+      const clearance = clearanceMap.get(String(rawItem.id));
+      return {
+        ...item,
+        effectiveStatus: clearance.status, // 'CLEARED' | 'HOLD' | 'PENDING' | 'NOT_ELIGIBLE'
+        clearanceDetails: clearance,
+      };
+    });
 
     // Filter items based on effective status tab filter
     let filteredItems = enrichedItems;
@@ -88,11 +95,7 @@ const getFishers = async (req, res, next) => {
     const offset = (pageNum - 1) * limitNum;
     const items = filteredItems.slice(offset, offset + limitNum);
 
-    // 3. Global real database counts across all fishers using getFisherClearanceStatus
-    const allFishersForCounts = await prisma.fishers.findMany({
-      select: { id: true, is_archived: true },
-    });
-
+    // Global real database counts across all fishers
     let count_all = 0;
     let count_active = 0;
     let count_blocked = 0;
@@ -100,12 +103,11 @@ const getFishers = async (req, res, next) => {
     let count_archived = 0;
 
     for (const f of allFishersForCounts) {
-      const fId = Number(f.id);
       if (f.is_archived) {
         count_archived += 1;
       } else {
         count_all += 1;
-        const clearance = await getFisherClearanceStatus(fId);
+        const clearance = clearanceMap.get(String(f.id));
         if (clearance.status === 'HOLD') {
           count_blocked += 1;
         } else if (clearance.status === 'PENDING') {
