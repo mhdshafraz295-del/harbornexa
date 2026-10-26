@@ -15,6 +15,16 @@ export const logout = async () => {
   return response.data;
 };
 
+export const updateProfile = async (payload) => {
+  const response = await api.put('/auth/profile', payload);
+  return response.data;
+};
+
+export const changePassword = async (currentPassword, newPassword) => {
+  const response = await api.put('/auth/change-password', { currentPassword, newPassword });
+  return response.data;
+};
+
 export const getDashboardMetrics = async () => {
   const response = await api.get('/dashboard/metrics');
   return response.data;

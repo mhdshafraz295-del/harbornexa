@@ -249,7 +249,138 @@ const createAdminAccount = async (req, res, next) => {
   }
 };
 
+/**
+ * PUT /api/auth/profile
+ * Update logged-in admin's name and/or login email (username).
+ * Requires current password for confirmation.
+ */
+const updateProfile = async (req, res, next) => {
+  const ipAddress = req.ip || req.connection?.remoteAddress || null;
+  const userAgent = req.get('user-agent') || null;
+
+  try {
+    const { name, email, currentPassword } = req.body;
+
+    if (!currentPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password is required to update your profile.',
+      });
+    }
+
+    const nameNorm = name !== undefined ? String(name).trim() : undefined;
+    const emailNorm = email !== undefined ? String(email).trim().toLowerCase() : undefined;
+
+    if (nameNorm !== undefined && !nameNorm) {
+      return res.status(400).json({ success: false, message: 'Name cannot be empty.' });
+    }
+    if (emailNorm !== undefined && !/^\S+@\S+\.\S+$/.test(emailNorm)) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid email address.' });
+    }
+
+    const admin = await prisma.admins.findUnique({ where: { id: req.admin.id } });
+    const valid = await bcrypt.compare(String(currentPassword), admin.password_hash);
+    if (!valid) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect.' });
+    }
+
+    if (emailNorm && emailNorm !== admin.email) {
+      const taken = await prisma.admins.findUnique({ where: { email: emailNorm } });
+      if (taken) {
+        return res.status(400).json({
+          success: false,
+          message: 'That email is already used by another admin.',
+        });
+      }
+    }
+
+    const data = { updated_at: new Date() };
+    if (nameNorm) data.name = nameNorm;
+    if (emailNorm) data.email = emailNorm;
+
+    const updated = await prisma.admins.update({
+      where: { id: admin.id },
+      data,
+    });
+
+    await logAudit({
+      adminId: admin.id,
+      action: 'ADMIN_PROFILE_UPDATED',
+      ipAddress,
+      userAgent,
+      metadata: { oldEmail: admin.email, newEmail: updated.email },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully.',
+      admin: {
+        id: updated.id,
+        name: updated.name,
+        email: updated.email,
+        role: updated.role,
+        last_login_at: updated.last_login_at,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PUT /api/auth/change-password
+ */
+const changePassword = async (req, res, next) => {
+  const ipAddress = req.ip || req.connection?.remoteAddress || null;
+  const userAgent = req.get('user-agent') || null;
+
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password and new password are required.',
+      });
+    }
+    if (String(newPassword).length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 8 characters long.',
+      });
+    }
+
+    const admin = await prisma.admins.findUnique({ where: { id: req.admin.id } });
+    const valid = await bcrypt.compare(String(currentPassword), admin.password_hash);
+    if (!valid) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect.' });
+    }
+
+    const passwordHash = await bcrypt.hash(String(newPassword), 12);
+    await prisma.admins.update({
+      where: { id: admin.id },
+      data: { password_hash: passwordHash, updated_at: new Date() },
+    });
+
+    await logAudit({
+      adminId: admin.id,
+      action: 'ADMIN_PASSWORD_CHANGED',
+      ipAddress,
+      userAgent,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password changed successfully.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
+  updateProfile,
+  changePassword,
   login,
   getMe,
   logout,

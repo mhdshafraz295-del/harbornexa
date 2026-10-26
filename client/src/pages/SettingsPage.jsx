@@ -8,6 +8,8 @@ import {
 } from '../services/chargeTypeService';
 import { Settings as SettingsIcon, Plus, Edit2, Check, X, AlertCircle, RefreshCw, ToggleLeft, ToggleRight, Coins } from 'lucide-react';
 
+import AccountSettings from '../components/settings/AccountSettings';
+
 export const SettingsPage = () => {
   const [chargeTypes, setChargeTypes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -142,6 +144,9 @@ export const SettingsPage = () => {
           <span>Refresh</span>
         </button>
       </div>
+
+      {/* Account: username & password */}
+      <AccountSettings />
 
       {/* Charge Types Section Card */}
       <div className="bg-white rounded-3xl border border-[#E5E7EB] p-6 shadow-2xs space-y-6">
