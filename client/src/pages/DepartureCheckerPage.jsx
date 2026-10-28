@@ -203,10 +203,18 @@ export const DepartureCheckerPage = () => {
         }).join('; ');
         reasonDetailsStr = `${reasonDetailsStr} • Reason: ${formattedReasons}`;
       }
-      const ownerInfo = r.ownerContact || r.phone;
-      if (isBlc && (r.boatNo || ownerInfo)) {
-        const extra = [r.boatNo ? `Boat: ${r.boatNo}` : '', ownerInfo ? `Owner/Contact: ${ownerInfo}` : ''].filter(Boolean).join(' | ');
-        if (extra) reasonDetailsStr += ` (${extra})`;
+      const ownerList = (r.ownerContacts && r.ownerContacts.length > 0)
+        ? r.ownerContacts
+        : (r.ownerContact || r.phone ? [r.ownerContact || r.phone] : []);
+      const boatList = (r.boatNos && r.boatNos.length > 0)
+        ? r.boatNos
+        : (r.boatNo ? [r.boatNo] : []);
+
+      if (isBlc && (boatList.length > 0 || ownerList.length > 0)) {
+        const extraParts = [];
+        if (boatList.length > 0) extraParts.push(`Boat: ${boatList.join(', ')}`);
+        if (ownerList.length > 0) extraParts.push(`Owner/Contact: ${ownerList.join(' | ')}`);
+        if (extraParts.length > 0) reasonDetailsStr += ` (${extraParts.join(' • ')})`;
       }
 
       return `
@@ -320,12 +328,18 @@ export const DepartureCheckerPage = () => {
         const blockReasonsHtml = isBlc && r.blockReasons && r.blockReasons.length > 0
           ? r.blockReasons.map(br => `<div style="font-size:9px; color:#991B1B; margin-top:2px;">→ ${br.label}</div>`).join('')
           : '';
+        const ownerList = (r.ownerContacts && r.ownerContacts.length > 0)
+          ? r.ownerContacts
+          : (r.ownerContact || r.phone ? [r.ownerContact || r.phone] : []);
+        const ownerHtml = isBlc && ownerList.length > 0
+          ? ownerList.map(o => `<div style="font-size:9px; color:#B45309; font-weight:bold; margin-top:1px;">Owner/Contact: ${o}</div>`).join('')
+          : '';
         return `
           <tr style="border-bottom: 1px solid #E2E8F0; ${isBlc ? 'background: #FFF5F5;' : ''}">
             <td style="padding: 6px 8px; font-family: monospace;">${r.nic || '—'}</td>
             <td style="padding: 6px 8px;">${r.fisherName || '—'}</td>
             <td style="padding: 6px 8px;">${r.boatNo || '—'}</td>
-            <td style="padding: 6px 8px;"><span style="color: ${badgeColor}; font-weight: 800;">${badgeText}</span>${blockReasonsHtml}</td>
+            <td style="padding: 6px 8px;"><span style="color: ${badgeColor}; font-weight: 800;">${badgeText}</span>${blockReasonsHtml}${ownerHtml}</td>
             <td style="padding: 6px 8px; font-size: 10px;">${r.details || '—'}</td>
           </tr>
         `;
@@ -754,18 +768,34 @@ export const DepartureCheckerPage = () => {
                                         {rsn.notes && !rsn.label.includes(rsn.notes) ? ` — ${rsn.notes}` : ''}
                                       </div>
                                     ))}
-                                    {isBlc && (r.boatNo || r.ownerContact || r.phone) && (
+                                    {isBlc && (((r.boatNos && r.boatNos.length > 0) || r.boatNo || (r.ownerContacts && r.ownerContacts.length > 0) || r.ownerContact || r.phone)) && (
                                       <div className="text-[10px] text-slate-600 font-bold flex items-center gap-1.5 flex-wrap mt-0.5">
-                                        {r.boatNo && (
+                                        {r.boatNos && r.boatNos.length > 0 ? (
+                                          r.boatNos.map((b, bIdx) => (
+                                            <span key={bIdx} className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                              Boat: {b}
+                                            </span>
+                                          ))
+                                        ) : r.boatNo ? (
                                           <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
                                             Boat: {r.boatNo}
                                           </span>
-                                        )}
-                                        {(r.ownerContact || r.phone) && (
-                                          <span className="bg-[#FFF7D6] text-[#B45309] px-1.5 py-0.5 rounded border border-[#FFD978]">
+                                        ) : null}
+
+                                        {r.ownerContacts && r.ownerContacts.length > 0 ? (
+                                          r.ownerContacts.map((contact, cIdx) => (
+                                            <span
+                                              key={cIdx}
+                                              className="bg-[#FFF7D6] text-[#B45309] px-1.5 py-0.5 rounded border border-[#FFD978] shadow-sm"
+                                            >
+                                              Owner / Contact: {contact}
+                                            </span>
+                                          ))
+                                        ) : (r.ownerContact || r.phone) ? (
+                                          <span className="bg-[#FFF7D6] text-[#B45309] px-1.5 py-0.5 rounded border border-[#FFD978] shadow-sm">
                                             Owner / Contact: {r.ownerContact || r.phone}
                                           </span>
-                                        )}
+                                        ) : null}
                                       </div>
                                     )}
                                   </div>

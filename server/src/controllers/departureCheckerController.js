@@ -501,7 +501,9 @@ const checkDeparturePdfs = async (req, res, next) => {
 
     // Step 2: Batch DB query & memoized clearance status calculation across unique NICs
     const uniqueNics = Array.from(allNicsSet);
-    const fisherMap = new Map(); // keyed by NIC (uppercase)
+    const nicsToFishersMap = new Map(); // keyed by NIC (uppercase) -> Array of matching fishers
+    const allFishersToCache = new Map(); // keyed by String(fisher.id) -> fisher object
+
     if (uniqueNics.length > 0) {
       const foundFishers = await prisma.fishers.findMany({
         where: {
@@ -519,7 +521,16 @@ const checkDeparturePdfs = async (req, res, next) => {
           status: true,
         },
       });
-      foundFishers.forEach((f) => fisherMap.set(f.nic.toUpperCase(), f));
+      foundFishers.forEach((f) => {
+        const nicKey = f.nic ? f.nic.trim().toUpperCase() : '';
+        if (nicKey) {
+          if (!nicsToFishersMap.has(nicKey)) {
+            nicsToFishersMap.set(nicKey, []);
+          }
+          nicsToFishersMap.get(nicKey).push(f);
+        }
+        allFishersToCache.set(String(f.id), f);
+      });
     }
 
     // Step 2b: Also collect all extracted boat numbers and find fishers by boat_no
@@ -527,7 +538,7 @@ const checkDeparturePdfs = async (req, res, next) => {
     fileDataList.forEach((fd) => {
       if (fd.extractedBoatNos) fd.extractedBoatNos.forEach((b) => allBoatNosSet.add(b.toUpperCase()));
     });
-    const boatFisherMap = new Map(); // keyed by boat_no (uppercase)
+    const boatFisherMap = new Map(); // keyed by boat_no (uppercase) -> Array of fishers
     if (allBoatNosSet.size > 0) {
       const boatFishers = await prisma.fishers.findMany({
         where: {
@@ -545,24 +556,24 @@ const checkDeparturePdfs = async (req, res, next) => {
           status: true,
         },
       });
-      boatFisherMap.forEach((f) => {
-        if (f.boat_no) boatFisherMap.set(f.boat_no.toUpperCase(), f);
+      boatFishers.forEach((f) => {
+        if (f.boat_no) {
+          const bKey = f.boat_no.trim().toUpperCase();
+          if (!boatFisherMap.has(bKey)) boatFisherMap.set(bKey, []);
+          boatFisherMap.get(bKey).push(f);
+        }
+        allFishersToCache.set(String(f.id), f);
       });
     }
 
     // Cache clearance results for unique Fishers (NIC + Boat) + fetch active holds for block reasons
-    const clearanceCache = new Map(); // keyed by fisher.id (BigInt)
-    const allFishersToCache = new Map();
-    fisherMap.forEach((f) => allFishersToCache.set(String(f.id), f));
-    boatFisherMap.forEach((f) => allFishersToCache.set(String(f.id), f));
-
-    // Batched: ONE clearance evaluation + ONE holds query for all fishers in this upload
+    const clearanceCache = new Map(); // keyed by String(fisher.id)
     const cacheFisherIds = Array.from(allFishersToCache.values()).map((f) => f.id);
     const bulkClearance = await getBulkFisherClearanceStatuses(cacheFisherIds);
     const allActiveHolds = cacheFisherIds.length > 0
       ? await prisma.fisher_holds.findMany({
           where: { fisher_id: { in: cacheFisherIds }, released_at: null },
-          select: { fisher_id: true, reason_code: true, reason_text: true, hold_date: true },
+          select: { fisher_id: true, reason_code: true, reason_text: true, hold_date: true, notes: true },
           orderBy: { id: 'desc' },
         })
       : [];
@@ -597,7 +608,7 @@ const checkDeparturePdfs = async (req, res, next) => {
         return { type: 'MANUAL', label: h.reason_text || 'Manual Hold' };
       });
 
-      clearanceCache.set(fisherKey, { clearanceResult, outcome, blockReasons });
+      clearanceCache.set(fisherKey, { clearanceResult, outcome, blockReasons, activeHolds });
     }
 
     // Step 3: Map EVERY extracted NIC to result list (including NOT_FOUND)
@@ -619,15 +630,20 @@ const checkDeparturePdfs = async (req, res, next) => {
       const results = fileData.extractedNics.map((rawNic) => {
         totalNicsExtracted++;
         const normalizedNic = rawNic.trim().toUpperCase();
-        const fisher = fisherMap.get(normalizedNic);
+        const matchingFishers = nicsToFishersMap.get(normalizedNic) || [];
 
-        if (!fisher) {
+        if (matchingFishers.length === 0) {
           totalNotFound++;
           return {
             nic: normalizedNic,
             fisherId: null,
+            fisherIds: [],
             fisherName: null,
             boatNo: null,
+            boatNos: [],
+            phone: null,
+            ownerContact: null,
+            ownerContacts: [],
             status: 'NOT_FOUND',
             outcome: 'NOT_FOUND',
             canProceed: false,
@@ -637,31 +653,111 @@ const checkDeparturePdfs = async (req, res, next) => {
           };
         }
 
-        const cached = clearanceCache.get(String(fisher.id));
-        const outcome = cached.outcome;
-        if (outcome === 'APPROVED') totalApproved++;
-        else if (outcome === 'BLC') totalBlc++;
-        else if (outcome === 'NOT_FOUND') totalNotFound++;
+        const cachedList = matchingFishers.map((f) => clearanceCache.get(String(f.id))).filter(Boolean);
+        const hasBlc = cachedList.some((c) => c.outcome === 'BLC') || matchingFishers.some((f) => f.status === 'BLOCKED');
+        const hasPending = !hasBlc && cachedList.some((c) => c.outcome === 'PENDING');
+
+        let finalOutcome = 'APPROVED';
+        let finalCanProceed = true;
+        let finalDetails = 'Cleared for departure';
+
+        if (hasBlc) {
+          finalOutcome = 'BLC';
+          finalCanProceed = false;
+          finalDetails = 'Departure hold active';
+          totalBlc++;
+        } else if (hasPending) {
+          finalOutcome = 'PENDING';
+          finalCanProceed = false;
+          finalDetails = 'Departure pending verification';
+        } else {
+          totalApproved++;
+        }
+
+        // Aggregate unique Fisher IDs
+        const uniqueFisherIds = Array.from(new Set(matchingFishers.map((f) => f.fisher_id).filter(Boolean)));
+
+        // Fisher Name (prefer non-empty full name)
+        const fisherName = matchingFishers.find((f) => f.full_name && f.full_name.trim())?.full_name || '—';
+
+        // Aggregate Boat Numbers
+        const boatsSet = new Set();
+        matchingFishers.forEach((f) => {
+          if (f.boat_no && f.boat_no.trim()) boatsSet.add(f.boat_no.trim().toUpperCase());
+        });
+        const uniqueBoatNos = Array.from(boatsSet);
+
+        // Aggregate Owner / Contacts (from fisher.phone, notes, and hold text)
+        const ownersSet = new Set();
+        matchingFishers.forEach((f) => {
+          if (f.phone && f.phone.trim()) {
+            ownersSet.add(f.phone.trim());
+          }
+          if (f.notes && typeof f.notes === 'string') {
+            const m = f.notes.match(/(?:Owner|Contact)\s*:\s*([^,\n\r;]+)/i);
+            if (m && m[1]) ownersSet.add(m[1].trim());
+          }
+        });
+        cachedList.forEach((c) => {
+          (c.activeHolds || []).forEach((h) => {
+            [h.reason_text, h.notes].forEach((txt) => {
+              if (txt && typeof txt === 'string') {
+                const m = txt.match(/(?:Owner|Contact)\s*:\s*([^,\n\r;]+)/i);
+                if (m && m[1]) ownersSet.add(m[1].trim());
+              }
+            });
+          });
+        });
+        const uniqueOwnerContacts = Array.from(ownersSet);
+
+        // Aggregate and deduplicate reasons from all matching fishers
+        const combinedReasons = [];
+        const seenReasonKeys = new Set();
+        cachedList.forEach((c) => {
+          (c.clearanceResult?.reasons || []).forEach((rsn) => {
+            const key = `${rsn.code || ''}|${rsn.label || ''}|${rsn.amount || ''}|${rsn.notes || ''}`;
+            if (!seenReasonKeys.has(key)) {
+              seenReasonKeys.add(key);
+              combinedReasons.push(rsn);
+            }
+          });
+        });
+
+        // Aggregate and deduplicate blockReasons
+        const combinedBlockReasons = [];
+        const seenBlockKeys = new Set();
+        cachedList.forEach((c) => {
+          (c.blockReasons || []).forEach((br) => {
+            const key = `${br.type || ''}|${br.label || ''}`;
+            if (!seenBlockKeys.has(key)) {
+              seenBlockKeys.add(key);
+              combinedBlockReasons.push(br);
+            }
+          });
+        });
 
         return {
           nic: normalizedNic,
-          fisherId: fisher.fisher_id,
-          fisherName: fisher.full_name,
-          boatNo: fisher.boat_no || null,
-          phone: fisher.phone || null,
-          ownerContact: fisher.phone || null,
-          fisherNotes: fisher.notes || null,
-          status: outcome,
-          outcome,
-          canProceed: cached.clearanceResult.canProceed,
-          details: cached.clearanceResult.canProceed ? 'Cleared for departure' : 'Departure hold active',
-          reasons: cached.clearanceResult.reasons || [],
-          blockReasons: cached.blockReasons || [],
+          fisherId: uniqueFisherIds.join(', ') || null,
+          fisherIds: uniqueFisherIds,
+          fisherName,
+          boatNo: uniqueBoatNos.join(', ') || null,
+          boatNos: uniqueBoatNos,
+          phone: uniqueOwnerContacts.join(', ') || null,
+          ownerContact: uniqueOwnerContacts[0] || null,
+          ownerContacts: uniqueOwnerContacts,
+          fisherNotes: matchingFishers.map((f) => f.notes).filter(Boolean).join('; ') || null,
+          status: finalOutcome,
+          outcome: finalOutcome,
+          canProceed: finalCanProceed,
+          details: finalDetails,
+          reasons: combinedReasons,
+          blockReasons: combinedBlockReasons,
         };
       });
 
       // Also add boat-number based blocked results (fishers found by boat_no but NOT already in NIC results)
-      const nicResultSet = new Set(results.map((r) => r.fisherId).filter(Boolean));
+      const nicResultSet = new Set(results.flatMap((r) => r.fisherIds || (r.fisherId ? [r.fisherId] : [])).filter(Boolean));
       if (fileData.extractedBoatNos && fileData.extractedBoatNos.length > 0) {
         for (const rawBoat of fileData.extractedBoatNos) {
           const normalizedBoat = rawBoat.trim().toUpperCase();
@@ -673,8 +769,13 @@ const checkDeparturePdfs = async (req, res, next) => {
             results.push({
               nic: '—',
               fisherId: null,
+              fisherIds: [],
               fisherName: '—',
               boatNo: normalizedBoat,
+              boatNos: [normalizedBoat],
+              phone: null,
+              ownerContact: null,
+              ownerContacts: [],
               status: 'BLC',
               outcome: 'BLC',
               canProceed: false,
@@ -687,30 +788,36 @@ const checkDeparturePdfs = async (req, res, next) => {
           }
 
           // 2. Check fisher-linked boat blocks
-          const boatFisher = boatFisherMap.get(normalizedBoat);
-          if (!boatFisher) continue;
-          if (nicResultSet.has(boatFisher.fisher_id)) continue;
+          const matchingBoatFishers = boatFisherMap.get(normalizedBoat) || [];
+          for (const boatFisher of matchingBoatFishers) {
+            if (nicResultSet.has(boatFisher.fisher_id)) continue;
 
-          const cached = clearanceCache.get(String(boatFisher.id));
-          if (!cached) continue;
-          const outcome = cached.outcome;
+            const cached = clearanceCache.get(String(boatFisher.id));
+            if (!cached) continue;
+            const outcome = cached.outcome;
 
-          if (outcome === 'BLC') {
-            totalBlc++;
-            totalNicsExtracted++;
-            results.push({
-              nic: boatFisher.nic || '—',
-              fisherId: boatFisher.fisher_id,
-              fisherName: boatFisher.full_name,
-              boatNo: boatFisher.boat_no || normalizedBoat,
-              status: 'BLC',
-              outcome: 'BLC',
-              canProceed: false,
-              details: `⛔ Boat Block – ${normalizedBoat}`,
-              reasons: [],
-              blockReasons: cached.blockReasons || [],
-              detectedBy: 'BOAT_NO',
-            });
+            if (outcome === 'BLC') {
+              totalBlc++;
+              totalNicsExtracted++;
+              results.push({
+                nic: boatFisher.nic || '—',
+                fisherId: boatFisher.fisher_id,
+                fisherIds: [boatFisher.fisher_id],
+                fisherName: boatFisher.full_name,
+                boatNo: boatFisher.boat_no || normalizedBoat,
+                boatNos: [boatFisher.boat_no || normalizedBoat],
+                phone: boatFisher.phone || null,
+                ownerContact: boatFisher.phone || null,
+                ownerContacts: boatFisher.phone ? [boatFisher.phone] : [],
+                status: 'BLC',
+                outcome: 'BLC',
+                canProceed: false,
+                details: `⛔ Boat Block – ${normalizedBoat}`,
+                reasons: cached.clearanceResult?.reasons || [],
+                blockReasons: cached.blockReasons || [],
+                detectedBy: 'BOAT_NO',
+              });
+            }
           }
         }
       }
