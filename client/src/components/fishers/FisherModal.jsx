@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, AlertCircle, User, Shield, CreditCard, Phone, Ship, MapPin, FileText } from 'lucide-react';
+import { X, Loader2, AlertCircle, User, Shield, CreditCard, Phone, Ship, MapPin, FileText, Banknote } from 'lucide-react';
 
 export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
   const isEditMode = !!fisher;
@@ -12,6 +12,7 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
     address: '',
     status: 'ACTIVE',
     notes: '',
+    loan_amount: '',
   });
 
   const [error, setError] = useState('');
@@ -37,6 +38,7 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
         address: '',
         status: 'ACTIVE',
         notes: '',
+        loan_amount: '',
       });
     }
     setError('');
@@ -270,6 +272,36 @@ export const FisherModal = ({ isOpen, onClose, onSubmit, fisher = null }) => {
               />
             </div>
           </div>
+
+          {/* Loan Amount — Add mode only */}
+          {!isEditMode && (
+            <div>
+              <label className="block text-xs font-bold text-[#111827] mb-1">
+                Loan Amount (Rs.)&nbsp;
+                <span className="text-slate-400 font-normal">— Optional</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Banknote className="w-4 h-4" />
+                </div>
+                <input
+                  type="number"
+                  name="loan_amount"
+                  min="0"
+                  step="0.01"
+                  value={formData.loan_amount}
+                  onChange={handleChange}
+                  placeholder="e.g. 25000.00"
+                  className="w-full pl-9 pr-3 py-2 bg-white border border-[#D1D5DB] rounded-xl text-sm text-[#111827] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FFD978] focus:border-[#F5B942]"
+                />
+              </div>
+              {formData.loan_amount && Number(formData.loan_amount) > 0 && (
+                <p className="text-[10px] text-amber-700 mt-1 font-medium">
+                  ⚠ இந்த Fisher-க்கு Rs.&nbsp;{Number(formData.loan_amount).toLocaleString('en-LK', { minimumFractionDigits: 2 })} கடன் பதியப்படும். கடன் அடைக்கும் வரை HOLD ஆகும்.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Footer Actions */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E5E7EB]">

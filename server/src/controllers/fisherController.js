@@ -181,7 +181,7 @@ const getFisherById = async (req, res, next) => {
  */
 const createFisher = async (req, res, next) => {
   try {
-    const { full_name, nic, phone, boat_no, address, notes, status = 'ACTIVE' } = req.body;
+    const { full_name, nic, phone, boat_no, address, notes, status = 'ACTIVE', loan_amount } = req.body;
 
     // 1. Validate full_name
     if (!full_name || typeof full_name !== 'string' || !full_name.trim()) {
@@ -252,6 +252,22 @@ const createFisher = async (req, res, next) => {
             reason_text: boat_no ? `Manual Block – Boat: ${boat_no.trim()}` : (notes ? `Manual Block – ${notes.trim()}` : 'Admin Block'),
             notes: notes ? notes.trim() : (boat_no ? `Boat: ${boat_no.trim()}` : null),
             hold_date: new Date(),
+            created_by_admin_id: req.admin?.id || 1,
+          },
+        });
+      }
+
+      // If loan_amount provided, create an OPEN debt record for this fisher
+      const parsedLoan = loan_amount ? parseFloat(loan_amount) : 0;
+      if (parsedLoan > 0) {
+        await tx.fisher_debts.create({
+          data: {
+            fisher_id: created.id,
+            original_amount: parsedLoan,
+            category: 'ADVANCE',
+            debt_date: new Date(),
+            description: `Initial loan at registration – Rs. ${parsedLoan.toFixed(2)}`,
+            status: 'OPEN',
             created_by_admin_id: req.admin?.id || 1,
           },
         });
