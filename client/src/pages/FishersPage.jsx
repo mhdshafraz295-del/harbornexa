@@ -4,6 +4,7 @@ import {
   getFishers,
   createFisher,
   updateFisher,
+  activateFisher,
   archiveFisher,
   restoreFisher,
   deleteFisher,
@@ -35,6 +36,7 @@ import {
   Coins,
   Lock,
   Trash2,
+  CheckCircle2,
 } from 'lucide-react';
 
 export const FishersPage = () => {
@@ -185,6 +187,16 @@ export const FishersPage = () => {
 
   const handleHoldUpdated = () => {
     fetchFisherData();
+  };
+
+  // Quick 1-click Activate Handler
+  const handleQuickActivate = async (fisher) => {
+    try {
+      await activateFisher(fisher.id);
+      fetchFisherData();
+    } catch (err) {
+      alert(err?.response?.data?.message || err.message || 'Failed to activate fisher.');
+    }
   };
 
   // Handlers for Archive / Restore
@@ -449,16 +461,16 @@ export const FishersPage = () => {
 
                       {/* Status */}
                       <td className="py-3.5 px-4">
-                        {fisher.is_archived || fisher.effectiveStatus === 'NOT_ELIGIBLE' ? (
+                        {fisher.is_archived ? (
                           <span className="px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-300 text-slate-700 text-[10px] font-extrabold">
                             ARCHIVED
                           </span>
-                        ) : (fisher.effectiveStatus ? fisher.effectiveStatus === 'CLEARED' : fisher.status === 'ACTIVE') ? (
+                        ) : fisher.status === 'ACTIVE' ? (
                           <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-extrabold flex items-center gap-1 w-fit">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                             ACTIVE
                           </span>
-                        ) : (fisher.effectiveStatus ? fisher.effectiveStatus === 'HOLD' : fisher.status === 'BLOCKED') ? (
+                        ) : fisher.status === 'BLOCKED' ? (
                           <span className="px-2.5 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-700 text-[10px] font-extrabold flex items-center gap-1 w-fit">
                             <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
                             BLOCKED
@@ -479,6 +491,16 @@ export const FishersPage = () => {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
+                          {/* Quick 1-click Activate button if blocked */}
+                          {fisher.status === 'BLOCKED' && !fisher.is_archived && (
+                            <button
+                              onClick={() => handleQuickActivate(fisher)}
+                              title="Make Active (Unblock)"
+                              className="p-1.5 rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => handleViewDetail(fisher)}
                             title="View Detail"
@@ -559,20 +581,23 @@ export const FishersPage = () => {
                       </span>
                     </div>
 
-                    {fisher.is_archived || fisher.effectiveStatus === 'NOT_ELIGIBLE' ? (
+                    {fisher.is_archived ? (
                       <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-extrabold">
                         ARCHIVED
                       </span>
-                    ) : (fisher.effectiveStatus ? fisher.effectiveStatus === 'CLEARED' : fisher.status === 'ACTIVE') ? (
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold border border-emerald-200">
+                    ) : fisher.status === 'ACTIVE' ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold border border-emerald-200 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                         ACTIVE
                       </span>
-                    ) : (fisher.effectiveStatus ? fisher.effectiveStatus === 'HOLD' : fisher.status === 'BLOCKED') ? (
-                      <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 text-[10px] font-extrabold border border-red-200">
+                    ) : fisher.status === 'BLOCKED' ? (
+                      <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 text-[10px] font-extrabold border border-red-200 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
                         BLOCKED
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-extrabold border border-amber-200">
+                      <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-extrabold border border-amber-200 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                         PENDING
                       </span>
                     )}
@@ -595,6 +620,15 @@ export const FishersPage = () => {
                     </span>
 
                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      {fisher.status === 'BLOCKED' && !fisher.is_archived && (
+                        <button
+                          onClick={() => handleQuickActivate(fisher)}
+                          className="px-2 py-1 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] font-bold text-emerald-800 flex items-center gap-1 cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Activate</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => handleOpenAddDebt(fisher)}
                         className="px-2 py-1 bg-amber-50 border border-amber-200 rounded-lg text-[11px] font-bold text-amber-800 flex items-center gap-1 cursor-pointer"

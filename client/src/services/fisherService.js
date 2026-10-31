@@ -20,6 +20,11 @@ export const updateFisher = async (id, fisherData) => {
   return response.data;
 };
 
+export const activateFisher = async (id) => {
+  const response = await api.post(`/fishers/${id}/activate`);
+  return response.data;
+};
+
 export const archiveFisher = async (id) => {
   const response = await api.post(`/fishers/${id}/archive`);
   return response.data;

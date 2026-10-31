@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Loader2, AlertCircle, ShieldAlert, CheckCircle2, RotateCcw, Plus, Lock } from 'lucide-react';
 import { createHold, releaseHold, getFisherHolds } from '../../services/holdService';
+import { activateFisher } from '../../services/fisherService';
 
 export const ManageHoldModal = ({ isOpen, onClose, fisher, onHoldUpdated, onSuccess }) => {
   const [holds, setHolds] = useState([]);
@@ -94,6 +95,22 @@ export const ManageHoldModal = ({ isOpen, onClose, fisher, onHoldUpdated, onSucc
     }
   };
 
+  const handleQuickUnblock = async () => {
+    try {
+      setSubmitting(true);
+      setError('');
+      await activateFisher(fisher.id);
+      await fetchHolds();
+      if (onHoldUpdated) onHoldUpdated();
+      if (onSuccess) onSuccess();
+      onClose();
+    } catch (err) {
+      setError(err?.response?.data?.message || err.message || 'Failed to unblock fisher.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const activeHoldsList = holds.filter((h) => !h.released_at);
 
   return (
@@ -135,6 +152,22 @@ export const ManageHoldModal = ({ isOpen, onClose, fisher, onHoldUpdated, onSucc
           {/* LIST MODE */}
           {mode === 'LIST' && (
             <div className="space-y-4">
+              {fisher.status === 'BLOCKED' && (
+                <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-bold text-red-900 block">Fisher Status: BLOCKED</span>
+                    <span className="text-[11px] text-red-700">இந்த Fisher-ஐ ACTIVE நிலைக்கு மாற்ற கீழே உள்ள பட்டனை அழுத்தவும்.</span>
+                  </div>
+                  <button
+                    onClick={handleQuickUnblock}
+                    disabled={submitting}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 disabled:opacity-50"
+                  >
+                    Unblock / Make Active
+                  </button>
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <span className="text-xs font-extrabold text-[#111827] uppercase tracking-wider">
                   Active Holds ({activeHoldsList.length})

@@ -63,7 +63,7 @@ const getFishers = async (req, res, next) => {
     // 3. Lightweight list of all fishers (for global counts) + ONE batched clearance
     //    evaluation instead of ~6 DB queries per fisher (twice).
     const allFishersForCounts = await prisma.fishers.findMany({
-      select: { id: true, is_archived: true },
+      select: { id: true, status: true, is_archived: true },
     });
     const clearanceMap = await getBulkFisherClearanceStatuses(
       allFishersForCounts.map((f) => f.id)
@@ -75,20 +75,20 @@ const getFishers = async (req, res, next) => {
       const clearance = clearanceMap.get(String(rawItem.id));
       return {
         ...item,
-        effectiveStatus: clearance.status, // 'CLEARED' | 'HOLD' | 'PENDING' | 'NOT_ELIGIBLE'
+        effectiveStatus: clearance ? clearance.status : 'CLEARED', // 'CLEARED' | 'HOLD' | 'PENDING' | 'NOT_ELIGIBLE'
         clearanceDetails: clearance,
       };
     });
 
-    // Filter items based on effective status tab filter
+    // Filter items based on tab filter
     let filteredItems = enrichedItems;
     const reqStatus = status ? status.toUpperCase() : '';
     if (reqStatus === 'BLOCKED') {
-      filteredItems = enrichedItems.filter((i) => i.effectiveStatus === 'HOLD');
+      filteredItems = enrichedItems.filter((i) => i.status === 'BLOCKED' || i.effectiveStatus === 'HOLD');
     } else if (reqStatus === 'ACTIVE') {
-      filteredItems = enrichedItems.filter((i) => i.effectiveStatus === 'CLEARED');
+      filteredItems = enrichedItems.filter((i) => i.status === 'ACTIVE');
     } else if (reqStatus === 'PENDING') {
-      filteredItems = enrichedItems.filter((i) => i.effectiveStatus === 'PENDING');
+      filteredItems = enrichedItems.filter((i) => i.status === 'PENDING' || i.effectiveStatus === 'PENDING');
     }
 
     const total = filteredItems.length;
@@ -107,12 +107,13 @@ const getFishers = async (req, res, next) => {
         count_archived += 1;
       } else {
         count_all += 1;
-        const clearance = clearanceMap.get(String(f.id));
-        if (clearance.status === 'HOLD') {
+        if (f.status === 'ACTIVE') {
+          count_active += 1;
+        } else if (f.status === 'BLOCKED') {
           count_blocked += 1;
-        } else if (clearance.status === 'PENDING') {
+        } else if (f.status === 'PENDING') {
           count_pending += 1;
-        } else if (clearance.status === 'CLEARED') {
+        } else {
           count_active += 1;
         }
       }
@@ -404,11 +405,12 @@ const updateFisher = async (req, res, next) => {
       let oldStatus = currentFisher.status;
       let newStatus = currentFisher.status;
 
-      if (status !== undefined && status !== currentFisher.status) {
-        if (['ACTIVE', 'BLOCKED', 'PENDING'].includes(status?.toUpperCase())) {
-          newStatus = status.toUpperCase();
+      if (status !== undefined) {
+        const targetStatus = status.toUpperCase();
+        if (['ACTIVE', 'BLOCKED', 'PENDING'].includes(targetStatus)) {
+          newStatus = targetStatus;
           updateData.status = newStatus;
-          statusChanged = true;
+          statusChanged = (newStatus !== oldStatus);
 
           // When explicitly activated by admin, release any active manual holds for this fisher
           if (newStatus === 'ACTIVE') {
@@ -648,11 +650,87 @@ const deleteFisher = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/fishers/:id/activate
+ * Direct 1-click activate / unblock a fisher
+ * Sets status = 'ACTIVE' and releases all active manual holds
+ */
+const activateFisher = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const isNumeric = !isNaN(Number(id));
+    if (!isNumeric) {
+      return res.status(400).json({ success: false, message: 'Invalid fisher ID.' });
+    }
+
+    const fisherIdNum = BigInt(id);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.fishers.findUnique({
+        where: { id: fisherIdNum },
+      });
+
+      if (!existing) {
+        return null;
+      }
+
+      // 1. Update status to ACTIVE
+      const updated = await tx.fishers.update({
+        where: { id: fisherIdNum },
+        data: {
+          status: 'ACTIVE',
+        },
+      });
+
+      // 2. Release all active manual holds
+      await tx.fisher_holds.updateMany({
+        where: {
+          fisher_id: fisherIdNum,
+          released_at: null,
+        },
+        data: {
+          released_at: new Date(),
+          released_by_admin_id: req.admin?.id || 1,
+          release_notes: 'Released when fisher activated by Admin',
+        },
+      });
+
+      return updated;
+    });
+
+    if (!result) {
+      return res.status(404).json({ success: false, message: 'Fisher not found.' });
+    }
+
+    await logAudit({
+      adminId: req.admin?.id || null,
+      action: 'FISHER_ACTIVATED',
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      metadata: {
+        id: Number(id),
+        fisherId: result.fisher_id,
+        fullName: result.full_name,
+        newStatus: 'ACTIVE',
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `"${result.full_name}" வெற்றிகரமாக ACTIVE செய்யப்பட்டது!`,
+      fisher: mapFisherResponse(result),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getFishers,
   getFisherById,
   createFisher,
   updateFisher,
+  activateFisher,
   archiveFisher,
   restoreFisher,
   deleteFisher,

@@ -6,6 +6,7 @@ const {
   getFisherById,
   createFisher,
   updateFisher,
+  activateFisher,
   archiveFisher,
   restoreFisher,
   deleteFisher,
@@ -18,6 +19,7 @@ router.get('/', getFishers);
 router.get('/:id', getFisherById);
 router.post('/', createFisher);
 router.patch('/:id', updateFisher);
+router.post('/:id/activate', activateFisher);
 router.post('/:id/archive', archiveFisher);
 router.post('/:id/restore', restoreFisher);
 router.delete('/:id', deleteFisher);
