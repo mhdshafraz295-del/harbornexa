@@ -191,7 +191,7 @@ export const DepartureCheckerPage = () => {
       const isApproved = r.status === 'APPROVED' || r.outcome === 'APPROVED';
       const isBlc = r.status === 'BLC' || r.outcome === 'BLC';
       const badgeColor = isApproved ? '#059669' : isBlc ? '#DC2626' : '#D97706';
-      const badgeText = isApproved ? 'APPROVED / NOT BLC' : isBlc ? 'BLC / BLOCKED' : 'NOT FOUND';
+      const badgeText = isApproved ? 'ACTIVE / APPROVED' : isBlc ? 'BLC / BLOCKED' : 'NOT FOUND';
 
       let reasonDetailsStr = r.details || '—';
       if (r.reasons && r.reasons.length > 0) {
@@ -740,7 +740,7 @@ export const DepartureCheckerPage = () => {
                                   {isApproved && (
                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 font-extrabold text-[11px]">
                                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                      <span>✅ APPROVED / NOT BLC</span>
+                                      <span>✅ ACTIVE / APPROVED</span>
                                     </span>
                                   )}
                                   {isBlc && (

@@ -393,6 +393,21 @@ const updateFisher = async (req, res, next) => {
           newStatus = status.toUpperCase();
           updateData.status = newStatus;
           statusChanged = true;
+
+          // When explicitly activated by admin, release any active manual holds for this fisher
+          if (newStatus === 'ACTIVE') {
+            await tx.fisher_holds.updateMany({
+              where: {
+                fisher_id: fisherIdNum,
+                released_at: null,
+              },
+              data: {
+                released_at: new Date(),
+                released_by_admin_id: req.admin?.id || 1,
+                release_notes: 'Released when status changed to ACTIVE by Admin',
+              },
+            });
+          }
         }
       }
 

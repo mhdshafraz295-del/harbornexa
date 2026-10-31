@@ -457,7 +457,7 @@ export const FisherDetailDrawer = ({
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 text-[10px] font-extrabold">
-                            ACTIVE
+                            HOLD ACTIVE
                           </span>
                         )}
                       </div>

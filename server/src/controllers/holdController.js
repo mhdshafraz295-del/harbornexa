@@ -141,6 +141,23 @@ const releaseHold = async (req, res, next) => {
         },
       });
 
+      // Check if this fisher has any remaining active holds
+      const remainingHolds = await tx.fisher_holds.count({
+        where: {
+          fisher_id: hold.fisher_id,
+          released_at: null,
+          id: { not: holdIdBig },
+        },
+      });
+
+      // If no other active holds exist, update fisher base status to ACTIVE so clearance turns CLEARED/ACTIVE (Green)
+      if (remainingHolds === 0) {
+        await tx.fishers.update({
+          where: { id: hold.fisher_id },
+          data: { status: 'ACTIVE' },
+        });
+      }
+
       return { updatedHold, hold };
     });
 
